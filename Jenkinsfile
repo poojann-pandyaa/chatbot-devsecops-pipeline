@@ -46,7 +46,7 @@ pipeline {
                 withDockerRegistry(credentialsId: 'docker', url: 'https://index.docker.io/v1/') {
                     sh '''
                         docker buildx build \
-                          --platform linux/amd64,linux/arm64 \
+                          --platform linux/arm64 \
                           -t ${IMAGE_NAME}:latest \
                           --push app/
                     '''
