@@ -1,0 +1,6 @@
+---
+- name: Deploy chatbot via Docker
+  hosts: k8s_workers
+  become: yes
+  roles:
+    - docker
