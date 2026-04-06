@@ -44,7 +44,7 @@ pipeline {
         }
         stage('Docker Build & Push') {
             steps {
-                withDockerRegistry(credentialsId: 'docker-cred') {
+                withDockerRegistry(credentialsId: 'docker-cred', url: 'https://index.docker.io/v1/') {
                     sh '''
                         docker buildx build \
                           --platform linux/amd64,linux/arm64 \
