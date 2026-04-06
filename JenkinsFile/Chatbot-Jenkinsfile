@@ -10,12 +10,14 @@ pipeline{
     stages {
         stage('Checkout from Git'){
             steps{
-                git branch: 'main', url: 'https://github.com/Poojan-Pandyaa/chatbot-devsecops-pipeline.git'
+                git branch: 'fix/node20-pipeline', url: 'https://github.com/Poojan-Pandyaa/chatbot-devsecops-pipeline.git'
             }
         }
         stage('Install Dependencies') {
             steps {
-                sh "npm install"
+                dir('app') {
+                    sh "npm install"
+                }
             }
         }
         stage("Sonarqube Analysis "){
@@ -41,29 +43,29 @@ pipeline{
         }
         stage('TRIVY FS SCAN') {
             steps {
-                sh "trivy fs . > trivyfs.json"
+                sh "trivy fs --format json --output trivyfs.json ."
             }
         }
         stage("Docker Build & Push"){
             steps{
                 script{
                    withDockerRegistry(credentialsId: 'docker', toolName: 'docker'){   
-                       sh "docker build -t chatbot ."
-                       sh "docker tag chatbot poojannpandyaa/chatbot:latest "
-                       sh "docker push poojannpandyaa/chatbot:latest "
+                       sh "docker build -t chatbot app/"
+                       sh "docker tag chatbot poojannpandyaa/chatbot:latest"
+                       sh "docker push poojannpandyaa/chatbot:latest"
                     }
                 }
             }
         }
         stage("TRIVY"){
             steps{
-                sh "trivy image poojannpandyaa/chatbot:latest > trivy.json" 
+                sh "trivy image --format json --output trivy.json poojannpandyaa/chatbot:latest" 
             }
         }
         stage ("Remove container") {
             steps{
-                sh "docker stop chatbot | true"
-                sh "docker rm chatbot | true"
+                sh "docker stop chatbot || true"
+                sh "docker rm chatbot || true"
              }
         }
         stage('Deploy to container'){
@@ -74,13 +76,13 @@ pipeline{
         stage('Deploy to kubernetes'){
             steps{
                 withAWS(credentials: 'aws-key', region: 'us-east-1'){
-                script{
-                    withKubeConfig(caCertificate: '', clusterName: '', contextName: '', credentialsId: 'k8s', namespace: '', restrictKubeConfigAccess: false, serverUrl: '') {
-                       sh 'kubectl apply -f k8s/chatbot-ui.yaml'
-                  }
+                    script{
+                        withKubeConfig(caCertificate: '', clusterName: '', contextName: '', credentialsId: 'k8s', namespace: '', restrictKubeConfigAccess: false, serverUrl: '') {
+                            sh 'kubectl apply -f k8s/chatbot-ui.yaml'
+                        }
+                    }
                 }
             }
         }
-        }
     }
-    }
+}
