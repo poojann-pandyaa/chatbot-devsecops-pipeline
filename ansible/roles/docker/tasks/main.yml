@@ -3,12 +3,10 @@
   community.docker.docker_image:
     name: "poojannpandyaa/chatbot:latest"
     source: pull
-
-- name: Remove existing chatbot container if present
+- name: Remove existing chatbot container
   community.docker.docker_container:
     name: chatbot
     state: absent
-
 - name: Run chatbot container
   community.docker.docker_container:
     name: chatbot
