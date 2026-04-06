@@ -33,7 +33,7 @@ pipeline {
         }
         stage('OWASP FS SCAN') {
             steps {
-                dependencyCheck additionalArguments: '--scan ./ --format HTML', odcInstallation: 'DP-Check'
+                dependencyCheck additionalArguments: '--scan ./ --format HTML --nvdApiKey F8A49F56-F631-F111-8369-129478FCB64D', odcInstallation: 'DP-Check'
                 dependencyCheckPublisher pattern: '**/dependency-check-report.html'
             }
         }
@@ -44,7 +44,7 @@ pipeline {
         }
         stage('Docker Build & Push') {
             steps {
-                withDockerRegistry(credentialsId: 'docker-cred', url: 'https://index.docker.io/v1/') {
+                withDockerRegistry(credentialsId: 'docker', url: 'https://index.docker.io/v1/') {
                     sh '''
                         docker buildx build \
                           --platform linux/amd64,linux/arm64 \
