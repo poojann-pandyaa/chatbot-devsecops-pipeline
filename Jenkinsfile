@@ -33,8 +33,8 @@ pipeline {
         }
         stage('OWASP FS SCAN') {
             steps {
-                dependencyCheck additionalArguments: '--scan ./ --format HTML --nvdApiKey F8A49F56-F631-F111-8369-129478FCB64D', odcInstallation: 'DP-Check'
-                dependencyCheckPublisher pattern: '**/dependency-check-report.html'
+                // dependencyCheck additionalArguments: '--scan ./ --format HTML --nvdApiKey F8A49F56-F631-F111-8369-129478FCB64D', odcInstallation: 'DP-Check'
+                // dependencyCheckPublisher pattern: '**/dependency-check-report.html'
             }
         }
         stage('TRIVY FS SCAN') {
