@@ -84,5 +84,43 @@ pipeline{
                 }
             }
         }
+
+        // ==================== NEW STAGES BELOW ====================
+
+        stage('Apply HPA'){
+            steps{
+                withAWS(credentials: 'aws-key', region: 'us-east-1'){
+                    script{
+                        withKubeConfig(caCertificate: '', clusterName: '', contextName: '', credentialsId: 'k8s', namespace: '', restrictKubeConfigAccess: false, serverUrl: '') {
+                            sh 'kubectl apply -f k8s/hpa.yaml'
+                            sh 'kubectl rollout status deployment/chatbot --timeout=120s'
+                        }
+                    }
+                }
+            }
+        }
+        stage('Verify Deployment'){
+            steps{
+                withAWS(credentials: 'aws-key', region: 'us-east-1'){
+                    script{
+                        withKubeConfig(caCertificate: '', clusterName: '', contextName: '', credentialsId: 'k8s', namespace: '', restrictKubeConfigAccess: false, serverUrl: '') {
+                            sh 'kubectl get deployment chatbot'
+                            sh 'kubectl get hpa chatbot-hpa'
+                            sh 'kubectl get pods'
+                            sh 'kubectl top pods'
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '✅ Pipeline succeeded — chatbot deployed and HPA active!'
+        }
+        failure {
+            echo '❌ Pipeline failed — check logs above'
+        }
     }
 }
