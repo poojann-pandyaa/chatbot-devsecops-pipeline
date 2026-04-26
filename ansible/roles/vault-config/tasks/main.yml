@@ -38,6 +38,13 @@
                 value: "root"
               - name: VAULT_DEV_LISTEN_ADDRESS
                 value: "0.0.0.0:8200"
+              - name: SKIP_SETCAP
+                value: "true"
+              securityContext:
+                capabilities:
+                  drop:
+                    - ALL
+                allowPrivilegeEscalation: false
 
 - name: Expose Vault as ClusterIP service
   kubernetes.core.k8s:
