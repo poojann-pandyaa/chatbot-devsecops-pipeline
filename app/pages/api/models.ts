@@ -1,4 +1,4 @@
-import { OpenAIModel, OpenAIModelID, OpenAIModels } from '@/types/openai';
+import { OpenAIModel } from '@/types/openai';
 import { OPENAI_API_HOST } from '@/utils/app/const';
 
 export const config = {
@@ -37,18 +37,12 @@ const handler = async (req: Request): Promise<Response> => {
 
     const json = await response.json();
 
-    const models: OpenAIModel[] = json.data
-      .map((model: any) => {
-        for (const [key, value] of Object.entries(OpenAIModelID)) {
-          if (value === model.id) {
-            return {
-              id: model.id,
-              name: OpenAIModels[value].name,
-            };
-          }
-        }
-      })
-      .filter(Boolean);
+    const models: OpenAIModel[] = json.data.map((model: any) => ({
+      id: model.id,
+      name: model.id,
+      maxLength: 32000,
+      tokenLimit: 8000,
+    }));
 
     return new Response(JSON.stringify(models), { status: 200 });
   } catch (error) {
