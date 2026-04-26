@@ -4,7 +4,6 @@ kind: Deployment
 metadata:
   name: chatbot
 spec:
-  replicas: 4
   selector:
     matchLabels:
       app: chatbot
