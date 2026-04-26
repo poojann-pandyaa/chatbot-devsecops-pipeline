@@ -10,16 +10,10 @@
     src: "{{ playbook_dir }}/../k8s/hpa.yaml"
 
 - name: Wait for chatbot deployment rollout
-  kubernetes.core.k8s_rollout_info:
-    api_version: apps/v1
-    kind: Deployment
-    name: chatbot
-    namespace: default
-  register: rollout
-  until: rollout.status.ready_replicas == rollout.status.replicas
-  retries: 12
-  delay: 10
+  shell: kubectl rollout status deployment/chatbot --timeout=120s
+  register: rollout_result
+  changed_when: false
 
 - name: Print deployment status
   debug:
-    msg: "Chatbot deployment is live with {{ rollout.status.ready_replicas }} replicas"
+    msg: "{{ rollout_result.stdout }}"
