@@ -27,10 +27,19 @@ export const OpenAIStream = async (
   key: string,
   messages: Message[],
 ) => {
+  if (!key || key.trim() === '') {
+    throw new OpenAIError(
+      'No API key provided. Please enter your Groq API key in the sidebar to use this chatbot.',
+      'no_api_key',
+      '',
+      'missing_api_key',
+    );
+  }
+
   const res = await fetch(`${OPENAI_API_HOST}/v1/chat/completions`, {
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${key ? key : process.env.OPENAI_API_KEY}`,
+      Authorization: `Bearer ${key}`,
       ...(process.env.OPENAI_ORGANIZATION && {
         'OpenAI-Organization': process.env.OPENAI_ORGANIZATION,
       }),
