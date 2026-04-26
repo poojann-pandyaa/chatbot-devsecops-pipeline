@@ -4,7 +4,7 @@ kind: Deployment
 metadata:
   name: chatbot
 spec:
-  replicas: 1
+  replicas: 4
   selector:
     matchLabels:
       app: chatbot
@@ -18,13 +18,23 @@ spec:
         image: poojannpandyaa/chatbot:latest
         ports:
         - containerPort: 3000
+        env:
+        - name: OPENAI_API_HOST
+          value: "https://api.groq.com/openai"
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: chatbot-secrets
+              key: OPENAI_API_KEY
+        - name: OPENAI_API_MODEL
+          value: "llama-3.3-70b-versatile"
         resources:
           requests:
             cpu: "100m"
-            memory: "256Mi"
+            memory: "128Mi"
           limits:
             cpu: "500m"
-            memory: "1024Mi"
+            memory: "512Mi"
 
 ---
 apiVersion: v1
