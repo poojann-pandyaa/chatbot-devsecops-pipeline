@@ -1,5 +1,6 @@
 import { ChatBody, Message } from '@/types/chat';
 import { DEFAULT_SYSTEM_PROMPT } from '@/utils/app/const';
+import { recordHttpRequest } from '@/utils/server/metrics';
 import { OpenAIError, OpenAIStream } from '@/utils/server';
 import tiktokenModel from '@dqbd/tiktoken/encoders/cl100k_base.json';
 import { Tiktoken, init } from '@dqbd/tiktoken/lite/init';
@@ -11,6 +12,8 @@ export const config = {
 };
 
 const handler = async (req: Request): Promise<Response> => {
+  const finishRequest = recordHttpRequest();
+
   try {
     const { model, messages, key, prompt } = (await req.json()) as ChatBody;
 
@@ -54,6 +57,8 @@ const handler = async (req: Request): Promise<Response> => {
     } else {
       return new Response('Error', { status: 500 });
     }
+  } finally {
+    finishRequest();
   }
 };
 

@@ -8,6 +8,15 @@
       metadata:
         name: vault
 
+- name: Create chatbot namespace for secrets
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ namespace | default('chatbot-prod') }}"
+
 - name: Deploy Vault in dev mode
   kubernetes.core.k8s:
     state: present
@@ -96,7 +105,7 @@
       kind: Secret
       metadata:
         name: chatbot-secrets
-        namespace: default
+        namespace: "{{ namespace | default('chatbot-prod') }}"
       type: Opaque
       stringData:
         OPENAI_API_KEY: "{{ openai_api_key }}"

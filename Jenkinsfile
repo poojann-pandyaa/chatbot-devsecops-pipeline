@@ -7,10 +7,16 @@ pipeline {
     environment {
         SCANNER_HOME = tool 'sonar-scanner'
         IMAGE_NAME   = "poojannpandyaa/chatbot"
+        K8S_NAMESPACE = "chatbot-prod"
     }
     stages {
         stage('Checkout SCM') {
-            steps { checkout scm }
+            steps {
+                checkout scm
+                script {
+                    env.IMAGE_TAG = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
+                }
+            }
         }
         stage('Install Dependencies') {
             steps { sh 'cd app && npm install' }
@@ -47,6 +53,7 @@ pipeline {
                     sh '''
                         docker buildx build \
                           --platform linux/arm64 \
+                          -t ${IMAGE_NAME}:${IMAGE_TAG} \
                           -t ${IMAGE_NAME}:latest \
                           --push app/
                     '''
@@ -55,7 +62,7 @@ pipeline {
         }
         stage('TRIVY') {
             steps {
-                sh 'trivy image ${IMAGE_NAME}:latest > trivyimage.txt'
+                sh 'trivy image ${IMAGE_NAME}:${IMAGE_TAG} > trivyimage.txt'
             }
         }
         stage('Remove container') {
@@ -65,12 +72,15 @@ pipeline {
         }
         stage('Deploy to container') {
             steps {
-                sh 'docker run -d --name chatbot -p 3000:3000 ${IMAGE_NAME}:latest'
+                sh 'docker run -d --name chatbot -p 3000:3000 ${IMAGE_NAME}:${IMAGE_TAG}'
             }
         }
-        stage('Deploy to kubernetes') {
+        stage('Ansible Deploy') {
             steps {
-                sh 'kubectl apply -f k8s/chatbot-ui.yaml'
+                sh '''
+                    ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml \
+                      --extra-vars "image_tag=${IMAGE_TAG} git_commit=${GIT_COMMIT} namespace=${K8S_NAMESPACE}"
+                '''
             }
         }
     }

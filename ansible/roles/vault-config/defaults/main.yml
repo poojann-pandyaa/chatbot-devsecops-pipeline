@@ -2,3 +2,4 @@
 # Override this variable when running the playbook:
 # ansible-playbook site.yml -e "openai_api_key=gsk_your_key"
 openai_api_key: ""
+namespace: chatbot-prod
