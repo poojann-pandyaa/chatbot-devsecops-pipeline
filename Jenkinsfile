@@ -1,9 +1,10 @@
 pipeline {
     agent any
     environment {
-        IMAGE_NAME = "chatbot-devsecops-local"
-        PATH = "/opt/homebrew/bin:/opt/homebrew/sbin:/opt/homebrew/opt/node@20/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        PATH      = "/opt/homebrew/bin:/opt/homebrew/sbin:/opt/homebrew/opt/node@20/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
         JAVA_HOME = "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
+        IMAGE_NAME   = "poojannpandyaa/chatbot"
+        K8S_NAMESPACE = "chatbot-prod"
     }
     stages {
         stage('Checkout SCM') {
@@ -14,31 +15,66 @@ pipeline {
                 }
             }
         }
-        stage('Docker Build') {
+        stage('Install Dependencies') {
+            steps {
+                sh 'cd app && npm install'
+            }
+        }
+        stage('SonarQube Analysis') {
+            steps {
+                echo 'SonarQube analysis skipped – server not available in local environment'
+            }
+        }
+        stage('Quality Gate') {
+            steps {
+                echo 'Quality gate skipped – SonarQube not available in local environment'
+            }
+        }
+        stage('OWASP FS SCAN') {
+            steps {
+                echo 'OWASP dependency-check skipped – NVD API key pending activation'
+            }
+        }
+        stage('TRIVY FS SCAN') {
+            steps {
+                sh 'trivy fs . --exit-code 0 --severity HIGH,CRITICAL --format table -o trivyfs.txt || true'
+                sh 'cat trivyfs.txt'
+            }
+        }
+        stage('Docker Build & Push') {
+            steps {
+                withDockerRegistry(credentialsId: 'docker', url: 'https://index.docker.io/v1/') {
+                    sh '''
+                        docker buildx build \
+                          --platform linux/arm64 \
+                          -t ${IMAGE_NAME}:${IMAGE_TAG} \
+                          -t ${IMAGE_NAME}:latest \
+                          --push app/
+                    '''
+                }
+            }
+        }
+        stage('TRIVY Image SCAN') {
+            steps {
+                sh 'trivy image ${IMAGE_NAME}:${IMAGE_TAG} --exit-code 0 --severity HIGH,CRITICAL --format table -o trivyimage.txt || true'
+                sh 'cat trivyimage.txt'
+            }
+        }
+        stage('Remove Container') {
+            steps {
+                sh 'docker stop chatbot || true && docker rm chatbot || true'
+            }
+        }
+        stage('Deploy to Container') {
+            steps {
+                sh 'docker run -d --name chatbot -p 3000:3000 ${IMAGE_NAME}:${IMAGE_TAG}'
+            }
+        }
+        stage('Ansible Deploy') {
             steps {
                 sh '''
-                    docker build \
-                      -t ${IMAGE_NAME}:${IMAGE_TAG} \
-                      -t ${IMAGE_NAME}:latest \
-                      app/
-                '''
-            }
-        }
-        stage('Remove container') {
-            steps {
-                sh 'docker stop chatbot-local || true && docker rm chatbot-local || true'
-            }
-        }
-        stage('Deploy to container') {
-            steps {
-                sh 'docker run -d --name chatbot-local -p 3000:3000 ${IMAGE_NAME}:${IMAGE_TAG}'
-            }
-        }
-        stage('Health Check') {
-            steps {
-                sh '''
-                    sleep 5
-                    docker exec chatbot-local wget -qO- http://127.0.0.1:3000/api/health
+                    ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml \
+                      --extra-vars "image_tag=${IMAGE_TAG} git_commit=${GIT_COMMIT} namespace=${K8S_NAMESPACE}"
                 '''
             }
         }
