@@ -1,7 +1,7 @@
 pipeline {
     agent any
     environment {
-        PATH      = "/opt/homebrew/bin:/opt/homebrew/sbin:/opt/homebrew/opt/node@20/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        PATH      = "/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/opt/homebrew/opt/node@20/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
         JAVA_HOME = "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
         IMAGE_NAME   = "poojannpandyaa/chatbot"
         K8S_NAMESPACE = "chatbot-prod"
@@ -43,13 +43,15 @@ pipeline {
         }
         stage('Docker Build & Push') {
             steps {
-                withDockerRegistry(credentialsId: 'docker', url: 'https://index.docker.io/v1/') {
+                withCredentials([usernamePassword(credentialsId: 'docker', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     sh '''
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin https://index.docker.io/v1/
                         docker buildx build \
                           --platform linux/arm64 \
                           -t ${IMAGE_NAME}:${IMAGE_TAG} \
                           -t ${IMAGE_NAME}:latest \
                           --push app/
+                        docker logout
                     '''
                 }
             }
