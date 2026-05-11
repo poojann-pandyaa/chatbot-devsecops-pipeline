@@ -1,0 +1,518 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue,
+    citecolor=blue
+}
+
+\definecolor{codegray}{RGB}{245,245,245}
+\definecolor{codeborder}{RGB}{210,210,210}
+
+\lstdefinestyle{projectcode}{
+    backgroundcolor=\color{codegray},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{codeborder},
+    columns=fullflexible,
+    keepspaces=true,
+    showstringspaces=false
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{SPE Project Report}
+\rhead{Chatbot DevSecOps Pipeline}
+\cfoot{\thepage}
+
+\titleformat{\section}{\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{1em}{}
+
+\begin{document}
+
+\begin{titlepage}
+    \centering
+    \vspace*{1.2cm}
+    {\Huge\bfseries Chatbot DevSecOps Pipeline\par}
+    \vspace{0.4cm}
+    {\Large Software Project Engineering Report\par}
+    \vspace{1.2cm}
+    {\large Project Repository: \texttt{poojann-pandyaa/chatbot-devsecops-pipeline}\par}
+    \vspace{0.8cm}
+    {\large Technology Stack: Next.js, Docker, Jenkins, Ansible, Kubernetes, Terraform, Vault, SonarQube, Trivy\par}
+    \vfill
+    \begin{tabular}{rl}
+        Student Name: & \textbf{Poojan Pandya} \\
+        Course: & \textbf{SPE} \\
+        Submission: & \textbf{Final Project} \\
+        Date: & \textbf{\today}
+    \end{tabular}
+    \vfill
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+\section{Abstract}
+
+This project implements a DevSecOps-enabled deployment pipeline for a web-based
+AI chatbot. The application is a Next.js frontend and API service that connects
+to an OpenAI-compatible large language model provider. The project focuses not
+only on application delivery, but also on automation, security scanning,
+infrastructure provisioning, secret management, containerization, Kubernetes
+deployment, and production-readiness controls.
+
+The final system uses Jenkins for CI/CD orchestration, Docker for packaging,
+SonarQube and Trivy for quality and security checks, Ansible for deployment
+automation, Terraform for EKS infrastructure, Vault-backed Kubernetes secrets for
+API key handling, and Kubernetes manifests for scalable production deployment.
+The Kubernetes layer includes namespace isolation, rolling updates, liveness and
+readiness probes, Ingress with TLS, a Pod Disruption Budget, and Horizontal Pod
+Autoscaling using resource and application-level metrics.
+
+\section{Introduction}
+
+Modern software delivery requires more than writing application code. Reliable
+systems must be built, tested, scanned, packaged, deployed, monitored, and
+scaled through repeatable automation. This project demonstrates those practices
+through a chatbot application deployed using a complete DevSecOps pipeline.
+
+The chatbot application provides a user interface for interacting with a large
+language model. The surrounding engineering work transforms the application from
+a simple web app into a deployable system with automated quality gates,
+container builds, image scanning, Kubernetes rollout verification, and
+infrastructure-as-code support.
+
+\section{Project Objectives}
+
+The major objectives of this project are:
+
+\begin{itemize}[leftmargin=*]
+    \item Build and package a Next.js chatbot application as a Docker image.
+    \item Automate build, scan, image publishing, and deployment through Jenkins.
+    \item Integrate static code analysis using SonarQube.
+    \item Integrate filesystem and container image vulnerability scanning using Trivy.
+    \item Use Ansible as the deployment driver for Kubernetes resources.
+    \item Store sensitive API keys through Kubernetes secrets prepared by the Vault configuration role.
+    \item Provision cloud Kubernetes infrastructure using Terraform for AWS EKS.
+    \item Deploy the application with production-grade Kubernetes controls.
+    \item Demonstrate autoscaling using Kubernetes HPA and application metrics.
+\end{itemize}
+
+\section{System Overview}
+
+The system contains five main layers:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Application Layer:} A Next.js chatbot UI and API service.
+    \item \textbf{Container Layer:} A multi-stage Dockerfile builds and runs the app.
+    \item \textbf{CI/CD Layer:} Jenkins automates dependency installation, analysis, scanning, build, push, and deployment.
+    \item \textbf{Deployment Automation Layer:} Ansible applies Kubernetes manifests and verifies rollout status.
+    \item \textbf{Infrastructure Layer:} Terraform defines AWS EKS cluster resources.
+\end{enumerate}
+
+\subsection{High-Level Architecture}
+
+\begin{center}
+\begin{tabular}{>{\raggedright\arraybackslash}p{4cm} >{\raggedright\arraybackslash}p{9cm}}
+\toprule
+\textbf{Component} & \textbf{Responsibility} \\
+\midrule
+Next.js App & Provides chatbot UI, chat API, health endpoint, and metrics endpoint. \\
+Docker & Packages the application into a portable container image. \\
+Jenkins & Runs CI/CD stages including build, security checks, image push, and Ansible deployment. \\
+SonarQube & Performs code quality and maintainability analysis. \\
+Trivy & Scans source files and Docker images for vulnerabilities. \\
+Ansible & Applies Kubernetes resources and waits for deployment rollout completion. \\
+Kubernetes & Runs the chatbot workload with replicas, probes, service, Ingress, PDB, and HPA. \\
+Vault Role & Prepares secret flow and creates the Kubernetes secret used by the chatbot pod. \\
+Terraform & Defines AWS EKS cluster, node group, IAM, VPC, and provider configuration. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Application Design}
+
+The application is implemented using Next.js. It contains a browser-based chat
+interface and API routes under \texttt{app/pages/api}. The main chat route
+streams responses from an OpenAI-compatible API endpoint. In this deployment,
+the Kubernetes manifest configures the host as:
+
+\begin{lstlisting}[style=projectcode]
+OPENAI_API_HOST=https://api.groq.com/openai
+OPENAI_API_MODEL=llama-3.3-70b-versatile
+\end{lstlisting}
+
+The API key is provided through the environment variable
+\texttt{OPENAI\_API\_KEY}. In Kubernetes, this value is injected from the
+\texttt{chatbot-secrets} secret.
+
+\subsection{Health and Metrics Endpoints}
+
+Two operational endpoints were added to support production deployment:
+
+\begin{itemize}[leftmargin=*]
+    \item \texttt{/api/health}: returns a simple JSON status response for Kubernetes liveness and readiness probes.
+    \item \texttt{/api/metrics}: exposes Prometheus-compatible metrics, including \texttt{http\_requests\_per\_second}, \texttt{http\_active\_requests}, and \texttt{http\_requests\_total}.
+\end{itemize}
+
+These endpoints make the application observable and allow Kubernetes to
+distinguish between a running container and a healthy application.
+
+\section{Dockerization}
+
+The application uses a multi-stage Dockerfile. The stages are:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Base:} sets up the Node.js working directory and copies package manifests.
+    \item \textbf{Dependencies:} runs \texttt{npm ci} for deterministic dependency installation.
+    \item \textbf{Build:} copies the application source and runs \texttt{npm run build}.
+    \item \textbf{Production:} copies the compiled Next.js application and starts it with \texttt{npm start}.
+\end{enumerate}
+
+This keeps the runtime image focused on production execution and ensures that
+build steps are reproducible.
+
+\section{CI/CD Pipeline}
+
+The Jenkins pipeline is defined in the root \texttt{Jenkinsfile}. It performs
+the following stages:
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{4cm} >{\raggedright\arraybackslash}p{9cm}}
+\toprule
+\textbf{Stage} & \textbf{Purpose} \\
+\midrule
+Checkout SCM & Pulls the source code and calculates a short Git commit image tag. \\
+Install Dependencies & Installs application dependencies inside the \texttt{app} directory. \\
+SonarQube Analysis & Runs static analysis through SonarQube. \\
+Quality Gate & Waits for the SonarQube quality gate result. \\
+OWASP FS Scan & Placeholder stage for OWASP dependency scanning once the NVD key is available. \\
+Trivy FS Scan & Scans the source tree and dependencies for vulnerabilities. \\
+Docker Build and Push & Builds the Docker image and pushes both \texttt{:latest} and commit-tagged images. \\
+Trivy Image Scan & Scans the commit-tagged Docker image. \\
+Deploy to Container & Runs the commit-tagged image as a local container for quick validation. \\
+Ansible Deploy & Runs the Ansible playbook to apply Kubernetes resources and verify rollout status. \\
+\bottomrule
+\end{longtable}
+
+\subsection{Traceable Image Tags}
+
+The pipeline generates a short image tag from the current Git commit:
+
+\begin{lstlisting}[style=projectcode]
+env.IMAGE_TAG = sh(script: 'git rev-parse --short=7 HEAD',
+                   returnStdout: true).trim()
+\end{lstlisting}
+
+The Docker image is pushed using both the immutable commit tag and the latest
+tag:
+
+\begin{lstlisting}[style=projectcode]
+docker buildx build \
+  --platform linux/arm64 \
+  -t ${IMAGE_NAME}:${IMAGE_TAG} \
+  -t ${IMAGE_NAME}:latest \
+  --push app/
+\end{lstlisting}
+
+This improves traceability because each Kubernetes rollout can be mapped back to
+a specific source code commit.
+
+\section{Security Engineering}
+
+Security is integrated at multiple stages of the project.
+
+\subsection{Static Analysis}
+
+SonarQube is used in the Jenkins pipeline to analyze code quality, maintainable
+design, bugs, and code smells. The pipeline includes a quality gate stage, which
+allows the build to react to the quality result.
+
+\subsection{Vulnerability Scanning}
+
+Trivy is used twice:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Filesystem scan:} \texttt{trivy fs . > trivyfs.txt}
+    \item \textbf{Image scan:} \texttt{trivy image \$\{IMAGE\_NAME\}:\$\{IMAGE\_TAG\} > trivyimage.txt}
+\end{itemize}
+
+The filesystem scan checks project files and dependency manifests. The image
+scan checks the final deployable container image. This ensures that both source
+dependencies and runtime image packages are inspected.
+
+\subsection{Secret Management}
+
+The chatbot requires an API key to call the LLM provider. The key is not
+hard-coded into the application or Docker image. Instead, Kubernetes injects it
+from the secret named \texttt{chatbot-secrets}.
+
+Example command:
+
+\begin{lstlisting}[style=projectcode]
+kubectl create secret generic chatbot-secrets \
+  --from-literal=OPENAI_API_KEY='gsk_your_key_here' \
+  -n chatbot-prod \
+  --dry-run=client -o yaml | kubectl apply -f -
+\end{lstlisting}
+
+The Ansible Vault configuration role also creates the Kubernetes secret in the
+target namespace using the provided \texttt{openai\_api\_key} variable.
+
+\section{Infrastructure as Code}
+
+The \texttt{EKS-TF} directory contains Terraform files for AWS EKS
+infrastructure. The infrastructure code includes:
+
+\begin{itemize}[leftmargin=*]
+    \item AWS provider configuration.
+    \item EKS cluster definition.
+    \item EKS node group definition.
+    \item IAM roles and policies.
+    \item VPC and subnet-related configuration.
+    \item Terraform backend and variables.
+\end{itemize}
+
+Using Terraform makes the infrastructure reproducible. Instead of manually
+creating Kubernetes clusters, the EKS environment can be declared, reviewed,
+versioned, and recreated.
+
+\section{Ansible Deployment Automation}
+
+Ansible is used as the actual Kubernetes deployment driver. The playbook
+\texttt{ansible/site.yml} includes three roles:
+
+\begin{itemize}[leftmargin=*]
+    \item \texttt{vault-config}: prepares Vault-related configuration and Kubernetes secrets.
+    \item \texttt{k8s-deploy}: applies Kubernetes manifests and verifies rollout status.
+    \item \texttt{docker}: legacy role for direct Docker deployment.
+\end{itemize}
+
+The Jenkins deployment stage calls:
+
+\begin{lstlisting}[style=projectcode]
+ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml \
+  --extra-vars "image_tag=${IMAGE_TAG} git_commit=${GIT_COMMIT} namespace=${K8S_NAMESPACE}"
+\end{lstlisting}
+
+This design avoids using Jenkins as a raw shell wrapper around \texttt{kubectl}.
+Instead, Jenkins delegates deployment logic to Ansible, which makes the
+deployment repeatable and easier to extend.
+
+\section{Kubernetes Deployment Design}
+
+The Kubernetes deployment was upgraded from a basic manifest into a more
+production-ready setup. The resources are stored under the \texttt{k8s}
+directory.
+
+\subsection{Namespace Isolation}
+
+The application runs in the dedicated namespace \texttt{chatbot-prod}. This
+separates chatbot resources from default cluster resources and supports cleaner
+access control, observability, and deletion.
+
+\subsection{Deployment Strategy}
+
+The deployment uses two replicas and a rolling update strategy:
+
+\begin{lstlisting}[style=projectcode]
+replicas: 2
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+\end{lstlisting}
+
+The value \texttt{maxUnavailable: 0} prevents Kubernetes from intentionally
+taking an old pod down before a replacement is ready. This supports
+zero-downtime deployment.
+
+\subsection{Health Probes}
+
+The pod defines both liveness and readiness probes against
+\texttt{/api/health}. The readiness probe controls whether a pod receives
+traffic. The liveness probe allows Kubernetes to restart the container if the
+application becomes unhealthy.
+
+\subsection{Service and Ingress}
+
+The service is a \texttt{ClusterIP} service named \texttt{chatbot-service}.
+External traffic is intended to enter through Nginx Ingress:
+
+\begin{itemize}[leftmargin=*]
+    \item Host: \texttt{chatbot.local}
+    \item TLS secret: \texttt{chatbot-tls}
+    \item Backend service: \texttt{chatbot-service}
+    \item Backend port: \texttt{80}
+\end{itemize}
+
+This is closer to real production Kubernetes than directly exposing every
+application through a \texttt{LoadBalancer} service.
+
+\subsection{Pod Disruption Budget}
+
+The Pod Disruption Budget requires at least one chatbot pod to remain available:
+
+\begin{lstlisting}[style=projectcode]
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: chatbot-pdb
+spec:
+  minAvailable: 1
+\end{lstlisting}
+
+This protects the application during voluntary disruptions such as node
+maintenance.
+
+\section{Autoscaling and Observability}
+
+The Horizontal Pod Autoscaler is configured with CPU, memory, and pod-level
+request-rate metrics:
+
+\begin{itemize}[leftmargin=*]
+    \item CPU target utilization: 50 percent.
+    \item Memory target utilization: 80 percent.
+    \item Pod metric: \texttt{http\_requests\_per\_second}, average value 10.
+\end{itemize}
+
+The application exposes \texttt{/api/metrics}, which produces
+Prometheus-compatible metric output. The pod template includes scrape
+annotations:
+
+\begin{lstlisting}[style=projectcode]
+prometheus.io/scrape: "true"
+prometheus.io/path: "/api/metrics"
+prometheus.io/port: "3000"
+\end{lstlisting}
+
+For CPU and memory scaling, the Kubernetes Metrics Server is required. For the
+custom request-rate metric, Prometheus and Prometheus Adapter are required so
+that Kubernetes HPA can consume the application metric.
+
+\subsection{Scaling Demonstration Commands}
+
+The following commands can be used to observe scaling:
+
+\begin{lstlisting}[style=projectcode]
+kubectl get hpa -n chatbot-prod -w
+kubectl get pods -n chatbot-prod -w
+kubectl describe hpa chatbot-hpa -n chatbot-prod
+\end{lstlisting}
+
+A simple load generator can be started inside the cluster:
+
+\begin{lstlisting}[style=projectcode]
+kubectl run load-generator \
+  --rm -i --tty \
+  --image=busybox \
+  -n chatbot-prod \
+  -- /bin/sh
+\end{lstlisting}
+
+Inside the shell:
+
+\begin{lstlisting}[style=projectcode]
+while true; do wget -q -O- http://chatbot-service/api/health; done
+\end{lstlisting}
+
+\section{Testing and Verification}
+
+The Docker image was built successfully using the project Dockerfile. The build
+completed the Next.js production compilation and showed the API routes,
+including:
+
+\begin{itemize}[leftmargin=*]
+    \item \texttt{/api/chat}
+    \item \texttt{/api/health}
+    \item \texttt{/api/metrics}
+    \item \texttt{/api/models}
+\end{itemize}
+
+The application container was started locally with Docker on port 3000. The
+health and metrics endpoints were verified from inside the running container:
+
+\begin{lstlisting}[style=projectcode]
+/api/health  -> {"status":"ok"}
+/api/metrics -> Prometheus text metrics
+\end{lstlisting}
+
+YAML syntax was also checked for the Kubernetes and Ansible YAML files using a
+local parser. A full \texttt{ansible-playbook --syntax-check} could not be run
+in the local shell because \texttt{ansible-playbook} was not installed in the
+environment.
+
+\section{Risk Analysis}
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{4cm} >{\raggedright\arraybackslash}p{5cm} >{\raggedright\arraybackslash}p{4cm}}
+\toprule
+\textbf{Risk} & \textbf{Impact} & \textbf{Mitigation} \\
+\midrule
+Invalid API key & Chatbot cannot call the LLM provider. & Use Kubernetes secret and verify key before rollout. \\
+Vulnerable dependencies & Security exposure in app or image. & Run Trivy filesystem and image scans in Jenkins. \\
+Failed deployment & Users may receive errors after deployment. & Use readiness probes and \texttt{kubectl rollout status}. \\
+Pod downtime during update & Temporary service outage. & Use two replicas and \texttt{maxUnavailable: 0}. \\
+Node maintenance disruption & Reduced availability. & Use Pod Disruption Budget with \texttt{minAvailable: 1}. \\
+Unconfigured custom metrics & HPA may not scale on request rate. & Install Prometheus and Prometheus Adapter before relying on custom metric. \\
+\bottomrule
+\end{longtable}
+
+\section{Project Outcomes}
+
+The project demonstrates a full DevSecOps workflow:
+
+\begin{itemize}[leftmargin=*]
+    \item Application code is built and packaged into Docker images.
+    \item Images are tagged with Git commit hashes for traceability.
+    \item Static analysis and vulnerability scanning are part of the pipeline.
+    \item Secrets are separated from source code and injected at runtime.
+    \item Kubernetes deployment uses production controls rather than a minimal demo manifest.
+    \item Ansible performs deployment automation and rollout verification.
+    \item Terraform provides infrastructure-as-code support for AWS EKS.
+    \item Health and metrics endpoints support reliability and observability.
+\end{itemize}
+
+\section{Future Enhancements}
+
+The project can be improved further with:
+
+\begin{itemize}[leftmargin=*]
+    \item Prometheus Adapter configuration committed as code for custom HPA metrics.
+    \item Grafana dashboards for chatbot traffic, latency, errors, and pod resource usage.
+    \item External Secrets Operator or Vault Agent Injector for deeper Vault integration.
+    \item Argo CD or Flux for GitOps-based continuous deployment.
+    \item Jenkins quality gates configured to fail builds on critical vulnerabilities.
+    \item Automated integration tests against the deployed Kubernetes service.
+    \item Production TLS certificate automation through cert-manager.
+\end{itemize}
+
+\section{Conclusion}
+
+This SPE project successfully converts a chatbot web application into a
+DevSecOps-ready system. The result includes CI/CD automation, image scanning,
+code quality analysis, containerization, Kubernetes deployment, secret handling,
+infrastructure-as-code, health checks, metrics, and autoscaling configuration.
+
+The most important engineering improvement is the shift from a basic deployment
+to a traceable and verifiable release process. Jenkins builds a commit-tagged
+image, Ansible applies Kubernetes resources, and Kubernetes verifies rollout
+health using probes and rollout status. These practices make the project closer
+to real production software delivery and demonstrate strong understanding of
+modern DevOps and DevSecOps principles.
+
+\end{document}
