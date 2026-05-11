@@ -2,7 +2,7 @@ version: '3.7'
 
 services:
 
-  # ── Elasticsearch ─────────────────────────────────────────────────────────
+  # -- Elasticsearch -----------------------------------------------------------
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
     container_name: elasticsearch
@@ -21,12 +21,12 @@ services:
     networks:
       - elk
     healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\|\"status\":\"yellow\"'"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
       interval: 20s
       timeout: 10s
       retries: 5
 
-  # ── Logstash ───────────────────────────────────────────────────────────────
+  # -- Logstash ----------------------------------------------------------------
   logstash:
     image: docker.elastic.co/logstash/logstash:8.13.0
     container_name: logstash
@@ -42,7 +42,7 @@ services:
       elasticsearch:
         condition: service_healthy
 
-  # ── Kibana ─────────────────────────────────────────────────────────────────
+  # -- Kibana ------------------------------------------------------------------
   kibana:
     image: docker.elastic.co/kibana/kibana:8.13.0
     container_name: kibana
@@ -56,7 +56,7 @@ services:
       elasticsearch:
         condition: service_healthy
 
-  # ── Filebeat (collects chatbot container logs) ─────────────────────────────
+  # -- Filebeat (collects chatbot container logs) ------------------------------
   filebeat:
     image: docker.elastic.co/beats/filebeat:8.13.0
     container_name: filebeat
