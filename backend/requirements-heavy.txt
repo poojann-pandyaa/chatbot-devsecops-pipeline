@@ -1,4 +1,1 @@
-torch
-faiss-cpu
-transformers
-sentence-transformers
+# No heavy deps needed — all LLM calls are via external APIs
