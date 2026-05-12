@@ -7,7 +7,7 @@ import redis as redis_lib
 import requests
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from ship_log import ship_to_elk
+from typing import Optional
 
 app = FastAPI()
 
@@ -48,20 +48,21 @@ MODEL_REGISTRY = {
     },
 }
 
-DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "grok")
+DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "groq")
 
 # ---------------------------------------------------------------------------
 # Core LLM caller (OpenAI-compatible /chat/completions)
 # ---------------------------------------------------------------------------
 
-def call_llm(messages: list, provider: str = DEFAULT_MODEL) -> str:
+def call_llm(messages: list, provider: str = DEFAULT_MODEL, api_key_override: str = None) -> str:
     cfg = MODEL_REGISTRY.get(provider)
     if not cfg:
         raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}. Available: {list(MODEL_REGISTRY.keys())}")
 
-    api_key = os.getenv(cfg["api_key_env"])
+    # Use override key (from frontend) or fall back to env var
+    api_key = api_key_override or os.getenv(cfg["api_key_env"])
     if not api_key:
-        raise HTTPException(status_code=500, detail=f"API key env var '{cfg['api_key_env']}' not set for provider '{provider}'")
+        raise HTTPException(status_code=500, detail=f"API key not set for provider '{provider}'. Set {cfg['api_key_env']} or pass api_key in request.")
 
     payload = {
         "model":    cfg["model"],
@@ -89,9 +90,10 @@ def call_llm(messages: list, provider: str = DEFAULT_MODEL) -> str:
 # ---------------------------------------------------------------------------
 
 class ChatRequest(BaseModel):
-    session_id: str = None
+    session_id: Optional[str] = None
     message: str
-    model: str = DEFAULT_MODEL  # caller can override per-request
+    model: str = DEFAULT_MODEL
+    api_key: Optional[str] = None  # optional per-request key override from frontend
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -106,29 +108,18 @@ async def chat(req: ChatRequest):
     history_raw = r.get(key)
     history = json.loads(history_raw) if history_raw else []
 
-    # Build messages list for LLM (full conversation context)
-    llm_messages = []
-    for entry in history:
-        llm_messages.append({"role": entry["role"], "content": entry["msg"]})
+    # Build messages list
+    llm_messages = [{"role": e["role"], "content": e["msg"]} for e in history]
     llm_messages.append({"role": "user", "content": req.message})
 
     start = datetime.datetime.utcnow()
-    answer = call_llm(llm_messages, provider=req.model)
+    answer = call_llm(llm_messages, provider=req.model, api_key_override=req.api_key)
     latency_ms = int((datetime.datetime.utcnow() - start).total_seconds() * 1000)
 
     # Persist to Redis
     history.append({"role": "user",      "msg": req.message})
     history.append({"role": "assistant", "msg": answer})
     r.setex(key, SESSION_TTL, json.dumps(history))
-
-    ship_to_elk({
-        "session_id":     session_id,
-        "message":        req.message,
-        "model":          req.model,
-        "latency_ms":     latency_ms,
-        "history_length": len(history),
-        "type":           "chat",
-    })
 
     return {
         "session_id": session_id,

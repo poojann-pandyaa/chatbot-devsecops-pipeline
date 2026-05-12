@@ -23,31 +23,32 @@ spec:
         env:
         - name: REDIS_HOST
           value: "redis-service"
-        - name: LOGSTASH_URL
-          value: "http://logstash:5045"
         - name: DEFAULT_MODEL
-          value: "grok"
+          value: "groq"
         - name: GROK_API_KEY
           valueFrom:
             secretKeyRef:
               name: llm-secrets
               key: GROK_API_KEY
-        # Optional: uncomment to enable other providers
-        # - name: OPENAI_API_KEY
-        #   valueFrom:
-        #     secretKeyRef:
-        #       name: llm-secrets
-        #       key: OPENAI_API_KEY
-        # - name: GROQ_API_KEY
-        #   valueFrom:
-        #     secretKeyRef:
-        #       name: llm-secrets
-        #       key: GROQ_API_KEY
-        # - name: MISTRAL_API_KEY
-        #   valueFrom:
-        #     secretKeyRef:
-        #       name: llm-secrets
-        #       key: MISTRAL_API_KEY
+              optional: true
+        - name: GROQ_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: llm-secrets
+              key: GROQ_API_KEY
+              optional: true
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: llm-secrets
+              key: OPENAI_API_KEY
+              optional: true
+        - name: MISTRAL_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: llm-secrets
+              key: MISTRAL_API_KEY
+              optional: true
         resources:
           requests:
             cpu: "250m"
