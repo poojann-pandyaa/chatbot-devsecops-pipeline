@@ -5,10 +5,10 @@ import { useEffect, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
 const MODELS = [
-  { id: 'grok',    label: 'Grok 3',         color: 'text-green-400' },
-  { id: 'openai',  label: 'GPT-4o',          color: 'text-blue-400' },
-  { id: 'groq',    label: 'Llama3-70B',      color: 'text-orange-400' },
-  { id: 'mistral', label: 'Mistral Large',   color: 'text-purple-400' },
+  { id: 'grok',    label: 'Grok 3',       color: 'text-green-400' },
+  { id: 'openai',  label: 'GPT-4o',        color: 'text-blue-400' },
+  { id: 'groq',    label: 'Llama3-70B',    color: 'text-orange-400' },
+  { id: 'mistral', label: 'Mistral Large', color: 'text-purple-400' },
 ];
 
 const EXAMPLE_QUESTIONS = [
@@ -26,18 +26,34 @@ interface ChatMessage {
 }
 
 export default function Home() {
-  const [messages, setMessages]   = useState<ChatMessage[]>([]);
-  const [input, setInput]         = useState('');
-  const [loading, setLoading]     = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [model, setModel]         = useState('grok');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [messages, setMessages]     = useState<ChatMessage[]>([]);
+  const [input, setInput]           = useState('');
+  const [loading, setLoading]       = useState(false);
+  const [sessionId, setSessionId]   = useState<string | null>(null);
+  const [model, setModel]           = useState('grok');
+  const [defaultModel, setDefaultModel] = useState('grok');
+  const [sidebarOpen, setSidebarOpen]   = useState(true);
+
+  // API key store: { modelId -> key }
+  const [apiKeys, setApiKeys]           = useState<Record<string, string>>({});
+  const [keyInputModel, setKeyInputModel] = useState('grok');
+  const [keyInputValue, setKeyInputValue] = useState('');
+  const [keysSaved, setKeysSaved]         = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef    = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const saveKey = () => {
+    if (!keyInputValue.trim()) return;
+    setApiKeys((prev) => ({ ...prev, [keyInputModel]: keyInputValue.trim() }));
+    setKeyInputValue('');
+    setKeysSaved(true);
+    setTimeout(() => setKeysSaved(false), 2000);
+  };
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || loading) return;
@@ -57,7 +73,12 @@ export default function Home() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sid, message: text, model }),
+        body: JSON.stringify({
+          session_id: sid,
+          message: text,
+          model,
+          api_key: apiKeys[model] || undefined,
+        }),
       });
 
       if (!res.ok) throw new Error('Backend error');
@@ -88,10 +109,7 @@ export default function Home() {
     }
   };
 
-  const newChat = () => {
-    setMessages([]);
-    setSessionId(null);
-  };
+  const newChat = () => { setMessages([]); setSessionId(null); };
 
   const currentModel = MODELS.find((m) => m.id === model);
 
@@ -107,12 +125,15 @@ export default function Home() {
 
         {/* SIDEBAR */}
         {sidebarOpen && (
-          <aside className="w-64 flex-shrink-0 bg-[#161b22] border-r border-gray-800 flex flex-col">
+          <aside className="w-64 flex-shrink-0 bg-[#161b22] border-r border-gray-800 flex flex-col overflow-y-auto">
+
+            {/* Logo */}
             <div className="px-5 py-4 border-b border-gray-800">
               <div className="text-lg font-bold text-white tracking-tight">💬 AI Chatbot</div>
               <div className="text-xs text-gray-500 mt-0.5">Multi-model · Redis sessions</div>
             </div>
 
+            {/* New Chat */}
             <div className="px-3 py-3">
               <button
                 onClick={newChat}
@@ -122,9 +143,23 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Model Selector */}
+            {/* Default Model */}
             <div className="px-4 py-3 border-t border-gray-800">
-              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Model</div>
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Default Model</div>
+              <select
+                value={defaultModel}
+                onChange={(e) => { setDefaultModel(e.target.value); setModel(e.target.value); }}
+                className="w-full text-xs bg-[#21262d] border border-gray-700 text-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-500"
+              >
+                {MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Active Model (per-chat override) */}
+            <div className="px-4 py-3 border-t border-gray-800">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Active Model</div>
               <div className="space-y-1">
                 {MODELS.map((m) => (
                   <button
@@ -139,53 +174,67 @@ export default function Home() {
                     <span className={m.color}>●</span>
                     <span className="ml-2 text-gray-300">{m.label}</span>
                     {model === m.id && <span className="ml-1 text-gray-500">✓</span>}
+                    {apiKeys[m.id] && <span className="ml-1 text-green-600">🔑</span>}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Session Info */}
+            {/* API Keys */}
             <div className="px-4 py-3 border-t border-gray-800">
-              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Session</div>
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Session ID</span>
-                  <span className="text-gray-300 font-mono truncate max-w-[100px]">
-                    {sessionId ? sessionId.slice(0, 8) + '...' : '—'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Messages</span>
-                  <span className="text-gray-300">{messages.length}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">History</span>
-                  <span className="text-green-400">Redis ✓</span>
-                </div>
-              </div>
-            </div>
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">API Keys</div>
 
-            {/* Infrastructure */}
-            <div className="px-4 py-3 border-t border-gray-800">
-              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Infrastructure</div>
-              <div className="space-y-2 text-xs">
-                {[
-                  { label: 'Backend',       status: 'K8s Pod' },
-                  { label: 'Cache',         status: 'Redis Pod' },
-                  { label: 'Orchestration', status: 'Minikube' },
-                  { label: 'CI/CD',         status: 'Jenkins' },
-                ].map(({ label, status }) => (
-                  <div key={label} className="flex justify-between">
-                    <span className="text-gray-500">{label}</span>
-                    <span className="text-green-400">{status}</span>
-                  </div>
+              <select
+                value={keyInputModel}
+                onChange={(e) => setKeyInputModel(e.target.value)}
+                className="w-full text-xs bg-[#21262d] border border-gray-700 text-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-500 mb-2"
+              >
+                {MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
                 ))}
-              </div>
+              </select>
+
+              <input
+                type="password"
+                value={keyInputValue}
+                onChange={(e) => setKeyInputValue(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && saveKey()}
+                placeholder="Paste API key..."
+                className="w-full text-xs bg-[#21262d] border border-gray-700 text-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-500 mb-2 placeholder-gray-600"
+              />
+
+              <button
+                onClick={saveKey}
+                disabled={!keyInputValue.trim()}
+                className="w-full text-xs bg-blue-700 hover:bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg px-3 py-2 transition-colors"
+              >
+                {keysSaved ? '✓ Saved' : 'Save Key'}
+              </button>
+
+              {/* Saved keys status */}
+              {Object.keys(apiKeys).length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {Object.entries(apiKeys).map(([mid, key]) => {
+                    const label = MODELS.find((m) => m.id === mid)?.label ?? mid;
+                    return (
+                      <div key={mid} className="flex items-center justify-between text-xs">
+                        <span className="text-gray-500">{label}</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-green-500 font-mono">{key.slice(0, 6)}...</span>
+                          <button
+                            onClick={() => setApiKeys((prev) => { const n = { ...prev }; delete n[mid]; return n; })}
+                            className="text-gray-600 hover:text-red-400 transition-colors"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            <div className="mt-auto px-4 py-3 border-t border-gray-800 text-xs text-gray-600">
-              SPE Project · May 2026
-            </div>
           </aside>
         )}
 
@@ -206,11 +255,6 @@ export default function Home() {
                 {currentModel?.label}
               </span>
             </div>
-            {sessionId && (
-              <span className="text-xs font-mono text-gray-600 bg-[#161b22] px-2 py-1 rounded border border-gray-800">
-                session: {sessionId.slice(0, 8)}
-              </span>
-            )}
           </header>
 
           {/* Messages */}
@@ -220,7 +264,7 @@ export default function Home() {
                 <div className="text-center">
                   <div className="text-4xl mb-3">💬</div>
                   <h1 className="text-2xl font-bold text-white mb-2">AI Chatbot</h1>
-                  <p className="text-gray-500 text-sm">Multi-model · Redis session history · Running on Kubernetes</p>
+                  <p className="text-gray-500 text-sm">Multi-model · Redis session history · Kubernetes</p>
                 </div>
                 <div className="grid grid-cols-2 gap-3 w-full max-w-xl">
                   {EXAMPLE_QUESTIONS.map((q) => (
@@ -291,11 +335,9 @@ export default function Home() {
                   {loading ? '...' : 'Send'}
                 </button>
               </div>
-              <p className="text-center text-xs text-gray-700 mt-2">
-                Multi-model AI Chatbot · Redis session history · Kubernetes
-              </p>
             </div>
           </div>
+
         </div>
       </div>
     </>

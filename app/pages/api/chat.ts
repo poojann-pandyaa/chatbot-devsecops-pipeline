@@ -6,12 +6,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const { session_id, message, model } = req.body;
+    const { session_id, message, model, api_key } = req.body;
 
     const response = await fetch(`${BACKEND_URL}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id, message, model: model || 'grok' }),
+      body: JSON.stringify({
+        session_id,
+        message,
+        model: model || 'grok',
+        api_key: api_key || undefined,
+      }),
     });
 
     if (!response.ok) {
