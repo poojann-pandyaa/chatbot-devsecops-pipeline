@@ -5,10 +5,10 @@ import { useEffect, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
 const MODELS = [
-  { id: 'grok',    label: 'Grok 3',       color: 'text-green-400' },
-  { id: 'openai',  label: 'GPT-4o',        color: 'text-blue-400' },
-  { id: 'groq',    label: 'Llama3-70B',    color: 'text-orange-400' },
-  { id: 'mistral', label: 'Mistral Large', color: 'text-purple-400' },
+  { id: 'grok',    label: 'Grok 3',            color: 'text-green-400' },
+  { id: 'openai',  label: 'GPT-4o',             color: 'text-blue-400' },
+  { id: 'groq',    label: 'Llama3.3-70B',       color: 'text-orange-400' },
+  { id: 'mistral', label: 'Mistral Large',      color: 'text-purple-400' },
 ];
 
 const EXAMPLE_QUESTIONS = [
@@ -25,18 +25,78 @@ interface ChatMessage {
   model?: string;
 }
 
+// Simple markdown renderer: bold, inline code, numbered lists, bullet lists
+function renderMarkdown(text: string) {
+  const lines = text.split('\n');
+  const elements: JSX.Element[] = [];
+  let i = 0;
+
+  const renderInline = (line: string, key: string) => {
+    const parts = line.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+    return (
+      <span key={key}>
+        {parts.map((part, pi) => {
+          if (part.startsWith('**') && part.endsWith('**'))
+            return <strong key={pi} className="font-semibold text-white">{part.slice(2, -2)}</strong>;
+          if (part.startsWith('`') && part.endsWith('`'))
+            return <code key={pi} className="bg-gray-800 text-orange-300 px-1 rounded text-xs font-mono">{part.slice(1, -1)}</code>;
+          return <span key={pi}>{part}</span>;
+        })}
+      </span>
+    );
+  };
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (/^\d+\.\s/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\d+\.\s/.test(lines[i])) {
+        items.push(lines[i].replace(/^\d+\.\s/, ''));
+        i++;
+      }
+      elements.push(
+        <ol key={`ol-${i}`} className="list-decimal list-inside space-y-1 my-2 text-gray-300">
+          {items.map((item, idx) => <li key={idx}>{renderInline(item, `li-${idx}`)}</li>)}
+        </ol>
+      );
+      continue;
+    }
+
+    if (/^[*-]\s/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^[*-]\s/.test(lines[i])) {
+        items.push(lines[i].replace(/^[*-]\s/, ''));
+        i++;
+      }
+      elements.push(
+        <ul key={`ul-${i}`} className="list-disc list-inside space-y-1 my-2 text-gray-300">
+          {items.map((item, idx) => <li key={idx}>{renderInline(item, `li-${idx}`)}</li>)}
+        </ul>
+      );
+      continue;
+    }
+
+    if (line.trim() === '') {
+      elements.push(<div key={`br-${i}`} className="h-2" />);
+    } else {
+      elements.push(<p key={`p-${i}`} className="text-gray-200 leading-relaxed">{renderInline(line, `p-${i}`)}</p>);
+    }
+    i++;
+  }
+
+  return <div className="space-y-1">{elements}</div>;
+}
+
 export default function Home() {
   const [messages, setMessages]     = useState<ChatMessage[]>([]);
   const [input, setInput]           = useState('');
   const [loading, setLoading]       = useState(false);
   const [sessionId, setSessionId]   = useState<string | null>(null);
-  const [model, setModel]           = useState('grok');
-  const [defaultModel, setDefaultModel] = useState('grok');
-  const [sidebarOpen, setSidebarOpen]   = useState(true);
-
-  // API key store: { modelId -> key }
-  const [apiKeys, setApiKeys]           = useState<Record<string, string>>({});
-  const [keyInputModel, setKeyInputModel] = useState('grok');
+  const [model, setModel]           = useState('groq');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [apiKeys, setApiKeys]         = useState<Record<string, string>>({});
+  const [keyInputModel, setKeyInputModel] = useState('groq');
   const [keyInputValue, setKeyInputValue] = useState('');
   const [keysSaved, setKeysSaved]         = useState(false);
 
@@ -83,7 +143,6 @@ export default function Home() {
 
       if (!res.ok) throw new Error('Backend error');
       const data = await res.json();
-
       setSessionId(data.session_id);
       setMessages((prev) =>
         prev.map((m) => (m.id === assistantId ? { ...m, content: data.answer } : m)),
@@ -103,21 +162,19 @@ export default function Home() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage(input);
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input); }
   };
 
   const newChat = () => { setMessages([]); setSessionId(null); };
 
   const currentModel = MODELS.find((m) => m.id === model);
+  const shortSession = sessionId ? sessionId.slice(0, 7) + '...' : null;
 
   return (
     <>
       <Head>
-        <title>AI Chatbot</title>
-        <meta name="description" content="Multi-model AI Chatbot" />
+        <title>⚡ RAG Chatbot</title>
+        <meta name="description" content="Reasoning-RAG · Stack Overflow Q&A" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
@@ -127,13 +184,11 @@ export default function Home() {
         {sidebarOpen && (
           <aside className="w-64 flex-shrink-0 bg-[#161b22] border-r border-gray-800 flex flex-col overflow-y-auto">
 
-            {/* Logo */}
             <div className="px-5 py-4 border-b border-gray-800">
-              <div className="text-lg font-bold text-white tracking-tight">💬 AI Chatbot</div>
-              <div className="text-xs text-gray-500 mt-0.5">Multi-model · Redis sessions</div>
+              <div className="text-lg font-bold text-white tracking-tight">⚡ RAG Chatbot</div>
+              <div className="text-xs text-gray-500 mt-0.5">Stack Overflow Q&A</div>
             </div>
 
-            {/* New Chat */}
             <div className="px-3 py-3">
               <button
                 onClick={newChat}
@@ -143,23 +198,78 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Default Model */}
+            {/* PIPELINE section */}
             <div className="px-4 py-3 border-t border-gray-800">
-              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Default Model</div>
-              <select
-                value={defaultModel}
-                onChange={(e) => { setDefaultModel(e.target.value); setModel(e.target.value); }}
-                className="w-full text-xs bg-[#21262d] border border-gray-700 text-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-500"
-              >
-                {MODELS.map((m) => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
-                ))}
-              </select>
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Pipeline</div>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">LLM</span>
+                  <span className={currentModel?.color ?? 'text-gray-400'}>{currentModel?.label}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Retrieval</span>
+                  <span className="text-blue-400">FAISS + BM25</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Reranker</span>
+                  <span className="text-cyan-400">MiniLM-L6</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Classifier</span>
+                  <span className="text-yellow-400">flan-t5-base</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Provider</span>
+                  <span className="text-gray-300">API Inference</span>
+                </div>
+              </div>
             </div>
 
-            {/* Active Model (per-chat override) */}
+            {/* SESSION section */}
             <div className="px-4 py-3 border-t border-gray-800">
-              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Active Model</div>
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Session</div>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Session ID</span>
+                  <span className="text-gray-300 font-mono">{shortSession ?? '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Messages</span>
+                  <span className="text-gray-300">{messages.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">History</span>
+                  <span className="text-green-400">Redis ✓</span>
+                </div>
+              </div>
+            </div>
+
+            {/* INFRASTRUCTURE section */}
+            <div className="px-4 py-3 border-t border-gray-800">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Infrastructure</div>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Backend</span>
+                  <span className="text-green-400">K8s Pod</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Cache</span>
+                  <span className="text-green-400">Redis Pod</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Orchestration</span>
+                  <span className="text-orange-400">Minikube</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">CI/CD</span>
+                  <span className="text-blue-400">Jenkins</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Model selector */}
+            <div className="px-4 py-3 border-t border-gray-800">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Model</div>
               <div className="space-y-1">
                 {MODELS.map((m) => (
                   <button
@@ -183,17 +293,13 @@ export default function Home() {
             {/* API Keys */}
             <div className="px-4 py-3 border-t border-gray-800">
               <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">API Keys</div>
-
               <select
                 value={keyInputModel}
                 onChange={(e) => setKeyInputModel(e.target.value)}
                 className="w-full text-xs bg-[#21262d] border border-gray-700 text-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-500 mb-2"
               >
-                {MODELS.map((m) => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
-                ))}
+                {MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
               </select>
-
               <input
                 type="password"
                 value={keyInputValue}
@@ -202,7 +308,6 @@ export default function Home() {
                 placeholder="Paste API key..."
                 className="w-full text-xs bg-[#21262d] border border-gray-700 text-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-500 mb-2 placeholder-gray-600"
               />
-
               <button
                 onClick={saveKey}
                 disabled={!keyInputValue.trim()}
@@ -210,31 +315,11 @@ export default function Home() {
               >
                 {keysSaved ? '✓ Saved' : 'Save Key'}
               </button>
-
-              {/* Saved keys status */}
-              {Object.keys(apiKeys).length > 0 && (
-                <div className="mt-2 space-y-1">
-                  {Object.entries(apiKeys).map(([mid, key]) => {
-                    const label = MODELS.find((m) => m.id === mid)?.label ?? mid;
-                    return (
-                      <div key={mid} className="flex items-center justify-between text-xs">
-                        <span className="text-gray-500">{label}</span>
-                        <div className="flex items-center gap-1">
-                          <span className="text-green-500 font-mono">{key.slice(0, 6)}...</span>
-                          <button
-                            onClick={() => setApiKeys((prev) => { const n = { ...prev }; delete n[mid]; return n; })}
-                            className="text-gray-600 hover:text-red-400 transition-colors"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
             </div>
 
+            <div className="mt-auto px-4 py-3 border-t border-gray-800">
+              <div className="text-xs text-gray-600">SPE Project · May 2026</div>
+            </div>
           </aside>
         )}
 
@@ -250,11 +335,16 @@ export default function Home() {
               ☰
             </button>
             <div className="flex-1">
-              <span className="text-sm font-semibold text-white">AI Chatbot</span>
-              <span className={`ml-2 text-xs ${currentModel?.color ?? 'text-gray-500'}`}>
-                {currentModel?.label}
-              </span>
+              <span className="text-sm font-semibold text-white">Reasoning-RAG</span>
+              <span className="ml-2 text-xs text-gray-500">Stack Overflow Q&A</span>
+              <span className="ml-2 text-xs text-gray-600">·</span>
+              <span className={`ml-2 text-xs ${currentModel?.color ?? 'text-gray-500'}`}>{currentModel?.label}</span>
+              <span className="ml-2 text-xs text-gray-600">·</span>
+              <span className="ml-2 text-xs text-gray-500">FAISS+BM25</span>
             </div>
+            {shortSession && (
+              <span className="text-xs text-gray-600 font-mono bg-[#21262d] px-2 py-1 rounded">session: {shortSession}</span>
+            )}
           </header>
 
           {/* Messages */}
@@ -262,9 +352,9 @@ export default function Home() {
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full space-y-8">
                 <div className="text-center">
-                  <div className="text-4xl mb-3">💬</div>
-                  <h1 className="text-2xl font-bold text-white mb-2">AI Chatbot</h1>
-                  <p className="text-gray-500 text-sm">Multi-model · Redis session history · Kubernetes</p>
+                  <div className="text-4xl mb-3">⚡</div>
+                  <h1 className="text-2xl font-bold text-white mb-2">Reasoning-RAG</h1>
+                  <p className="text-gray-500 text-sm">Stack Overflow Q&A · FAISS + BM25 + Cross-Encoder · Redis session history</p>
                 </div>
                 <div className="grid grid-cols-2 gap-3 w-full max-w-xl">
                   {EXAMPLE_QUESTIONS.map((q) => (
@@ -288,16 +378,19 @@ export default function Home() {
                       </div>
                     ) : (
                       <div className="flex gap-3">
-                        <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-xs font-bold">AI</div>
+                        <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-xs font-bold">R</div>
                         <div className="flex-1 space-y-1">
-                          <div className="bg-[#161b22] border border-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-gray-200 leading-relaxed whitespace-pre-wrap">
-                            {msg.content || (
-                              <span className="inline-flex gap-1">
-                                <span className="animate-bounce">·</span>
-                                <span className="animate-bounce" style={{ animationDelay: '0.15s' }}>·</span>
-                                <span className="animate-bounce" style={{ animationDelay: '0.3s' }}>·</span>
-                              </span>
-                            )}
+                          <div className="bg-[#161b22] border border-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed">
+                            {msg.content
+                              ? renderMarkdown(msg.content)
+                              : (
+                                <span className="inline-flex gap-1">
+                                  <span className="animate-bounce">·</span>
+                                  <span className="animate-bounce" style={{ animationDelay: '0.15s' }}>·</span>
+                                  <span className="animate-bounce" style={{ animationDelay: '0.3s' }}>·</span>
+                                </span>
+                              )
+                            }
                           </div>
                           {msg.model && (
                             <div className="text-xs text-gray-600 ml-1">
@@ -324,7 +417,7 @@ export default function Home() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={`Message ${currentModel?.label}...`}
+                  placeholder="Ask a Stack Overflow question..."
                   className="flex-1 bg-transparent text-sm text-gray-200 placeholder-gray-600 resize-none outline-none max-h-32"
                 />
                 <button
@@ -334,6 +427,9 @@ export default function Home() {
                 >
                   {loading ? '...' : 'Send'}
                 </button>
+              </div>
+              <div className="text-center text-xs text-gray-700 mt-2">
+                Powered by Reasoning-RAG · FAISS + BM25 + Cross-Encoder · Redis session history
               </div>
             </div>
           </div>
