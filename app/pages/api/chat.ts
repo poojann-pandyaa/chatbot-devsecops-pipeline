@@ -1,38 +1,22 @@
-import { recordHttpRequest } from '@/utils/server/metrics';
-
-export const config = {
-  runtime: 'nodejs',
-};
+import { NextApiRequest, NextApiResponse } from 'next';
 
 const RAG_BACKEND_URL =
   process.env.RAG_BACKEND_URL || 'http://chatbot-service/chat';
 
-const handler = async (req: Request): Promise<Response> => {
-  const finishRequest = recordHttpRequest();
-
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
-    finishRequest();
-    return new Response('Method Not Allowed', { status: 405 });
+    return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
   try {
-    const body = await req.json();
-
-    // Extract the latest user message from the messages array
+    const body = req.body;
     const messages: { role: string; content: string }[] = body.messages || [];
-    const lastUserMessage = [...messages]
-      .reverse()
-      .find((m) => m.role === 'user');
+    const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
 
     if (!lastUserMessage) {
-      finishRequest();
-      return new Response(JSON.stringify({ error: 'No user message found' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return res.status(400).json({ error: 'No user message found' });
     }
 
-    // Call the RAG backend
     const ragResponse = await fetch(RAG_BACKEND_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -41,44 +25,35 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (!ragResponse.ok) {
       const errText = await ragResponse.text();
-      finishRequest();
-      return new Response(
-        JSON.stringify({ error: `RAG backend error: ${errText}` }),
-        { status: ragResponse.status, headers: { 'Content-Type': 'application/json' } },
-      );
+      return res.status(ragResponse.status).json({ error: `RAG backend error: ${errText}` });
     }
 
     const ragData = await ragResponse.json();
     const answer: string = ragData.answer || 'No answer returned.';
+    const sessionId: string = ragData.session_id || '';
+    const reasoning = ragData.reasoning || null;
 
-    // Return as OpenAI-compatible streaming response so the existing
-    // frontend Chat component works without changes
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        // Send answer as a single SSE chunk then close
-        const chunk = JSON.stringify({
-          choices: [{ delta: { content: answer }, finish_reason: null }],
-        });
-        controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
-        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-        controller.close();
-      },
-    });
+    // Set headers for SSE streaming
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
 
-    finishRequest();
-    return new Response(stream, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-      },
+    // Send meta (session_id + reasoning) as first event
+    const metaChunk = JSON.stringify({ session_id: sessionId, reasoning });
+    res.write(`data: ${metaChunk}\n\n`);
+
+    // Send answer as OpenAI-compatible SSE chunk
+    const answerChunk = JSON.stringify({
+      choices: [{ delta: { content: answer }, finish_reason: null }],
     });
+    res.write(`data: ${answerChunk}\n\n`);
+    res.write('data: [DONE]\n\n');
+
+    res.end();
   } catch (error) {
     console.error('[/api/chat] Error:', error);
-    finishRequest();
-    return new Response('Internal Server Error', { status: 500 });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
   }
-};
-
-export default handler;
+}
