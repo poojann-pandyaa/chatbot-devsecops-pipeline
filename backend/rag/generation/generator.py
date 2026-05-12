@@ -37,25 +37,23 @@ class _HFInferenceGenerator:
         max_new_tokens: int = 512,
     ):
         from huggingface_hub import InferenceClient
-        self._token = _hf_token()
-        if not self._token:
-            raise EnvironmentError("[HFAPI] HF_TOKEN env var not set.")
-        print(f"[HFAPI] Using HuggingFace Inference API: {model_name}")
-        self._client         = InferenceClient(token=self._token)
-        self._model          = model_name
+        token = _hf_token()
+        print(f"[Generator] Backend: HuggingFace Inference API ({model_name})")
+        self._client = InferenceClient(model=model_name, token=token)
         self._max_new_tokens = max_new_tokens
+        self._model_name = model_name
 
     def invoke(self, prompt: str) -> str:
-        response = self._client.text_generation(
-            prompt,
-            model=self._model,
-            max_new_tokens=self._max_new_tokens,
+        # gemma-2-2b-it routes through featherless-ai on HF Inference API
+        # which only supports 'conversational' task -> must use chat_completion
+        messages = [{"role": "user", "content": prompt}]
+        response = self._client.chat_completion(
+            messages=messages,
+            max_tokens=self._max_new_tokens,
             temperature=0.7,
             top_p=0.9,
-            repetition_penalty=1.2,
-            do_sample=True,
         )
-        return response.strip()
+        return response.choices[0].message.content.strip()
 
 
 # ---------------------------------------------------------------------------
