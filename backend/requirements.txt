@@ -1,11 +1,7 @@
 fastapi
 uvicorn
 pydantic
-faiss-cpu
 rank-bm25
-transformers
-sentence-transformers
-torch
 beautifulsoup4
 langchain==0.3.28
 langchain-community==0.3.31
