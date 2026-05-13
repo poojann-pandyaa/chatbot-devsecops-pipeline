@@ -5,11 +5,15 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://chatbot-service';
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (req.method === 'POST') {
-      // Save a key
+      // Save a key — inject default provider if not supplied by UI
+      const body = {
+        provider: 'openai',
+        ...req.body,
+      };
       const response = await fetch(`${BACKEND_URL}/keys`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(req.body),
+        body: JSON.stringify(body),
       });
       const data = await response.json();
       return res.status(response.status).json(data);
