@@ -24,6 +24,21 @@ services:
       timeout: 10s
       retries: 5
 
+  # -- Kibana (ELK UI) ---------------------------------------------------------
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.0
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - XPACK_SECURITY_ENABLED=false
+    ports:
+      - "5601:5601"
+    networks:
+      - elk
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
   # -- Logstash ----------------------------------------------------------------
   logstash:
     image: docker.elastic.co/logstash/logstash:8.13.0
@@ -66,6 +81,19 @@ services:
     networks:
       - elk
     restart: unless-stopped
+
+  # -- Redis Exporter (Prometheus) --------------------------------------------
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    container_name: redis-exporter
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+    ports:
+      - "9121:9121"
+    networks:
+      - elk
+    depends_on:
+      - redis
 
   # -- Vault (optional; start with --profile vault) ----------------------------
   vault:
@@ -125,6 +153,43 @@ services:
     depends_on:
       - chatbot-backend
     restart: unless-stopped
+
+  # -- Prometheus --------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.53.1
+    container_name: prometheus
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    networks:
+      - elk
+    depends_on:
+      - chatbot-backend
+      - chatbot-frontend
+      - redis-exporter
+
+  # -- Grafana -----------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+    networks:
+      - elk
+    depends_on:
+      - prometheus
 
 volumes:
   esdata:

@@ -7,10 +7,40 @@ import base64
 import redis as redis_lib
 import requests
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import PlainTextResponse
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from pydantic import BaseModel
 from typing import Optional
 
 app = FastAPI()
+
+# ---------------------------------------------------------------------------
+# Prometheus metrics
+# ---------------------------------------------------------------------------
+HTTP_REQUESTS_TOTAL = Counter(
+    "backend_http_requests_total",
+    "Total HTTP requests handled by backend routes.",
+    ["route", "method", "status"],
+)
+HTTP_REQUEST_DURATION_SECONDS = Histogram(
+    "backend_http_request_duration_seconds",
+    "Latency of backend HTTP requests in seconds.",
+    ["route", "method"],
+)
+CHAT_REQUESTS_TOTAL = Counter(
+    "backend_chat_requests_total",
+    "Total chat requests by model.",
+    ["model", "status"],
+)
+KEY_OPS_TOTAL = Counter(
+    "backend_key_operations_total",
+    "Total key operations.",
+    ["operation", "provider", "status"],
+)
+ACTIVE_SESSIONS_GAUGE = Gauge(
+    "backend_active_sessions",
+    "Current number of active Redis sessions.",
+)
 
 # ---------------------------------------------------------------------------
 # Redis
@@ -225,6 +255,8 @@ class SaveKeyRequest(BaseModel):
 # ---------------------------------------------------------------------------
 @app.post("/chat")
 async def chat(req: ChatRequest):
+    start = datetime.datetime.utcnow()
+    status_label = "success"
     session_id = req.session_id or str(uuid.uuid4())
     key = _session_key(session_id)
 
@@ -237,8 +269,17 @@ async def chat(req: ChatRequest):
     llm_messages.append({"role": "user", "content": req.message})
 
     # Resolve API key: user-stored > override > env
-    api_key = _resolve_api_key(req.model, req.user_id, req.api_key)
-    answer = call_llm(llm_messages, provider=req.model, api_key=api_key)
+    try:
+        api_key = _resolve_api_key(req.model, req.user_id, req.api_key)
+        answer = call_llm(llm_messages, provider=req.model, api_key=api_key)
+    except Exception:
+        status_label = "error"
+        CHAT_REQUESTS_TOTAL.labels(model=req.model, status=status_label).inc()
+        HTTP_REQUESTS_TOTAL.labels(route="/chat", method="POST", status="500").inc()
+        HTTP_REQUEST_DURATION_SECONDS.labels(route="/chat", method="POST").observe(
+            max((datetime.datetime.utcnow() - start).total_seconds(), 0)
+        )
+        raise
 
     # Save updated history to Redis
     history.append({"role": "user",      "msg": req.message})
@@ -247,6 +288,11 @@ async def chat(req: ChatRequest):
     if req.user_id:
         _record_session(req.user_id, session_id, req.message, req.model)
 
+    CHAT_REQUESTS_TOTAL.labels(model=req.model, status=status_label).inc()
+    HTTP_REQUESTS_TOTAL.labels(route="/chat", method="POST", status="200").inc()
+    HTTP_REQUEST_DURATION_SECONDS.labels(route="/chat", method="POST").observe(
+        max((datetime.datetime.utcnow() - start).total_seconds(), 0)
+    )
     return {"session_id": session_id, "answer": answer, "model": req.model, "history": history}
 
 # ---------------------------------------------------------------------------
@@ -255,11 +301,22 @@ async def chat(req: ChatRequest):
 @app.post("/keys")
 async def save_key(req: SaveKeyRequest):
     """Store a user's API key securely in Redis and sync to Vault."""
+    start = datetime.datetime.utcnow()
     if req.provider not in MODEL_REGISTRY:
+        KEY_OPS_TOTAL.labels(operation="save", provider=req.provider, status="error").inc()
+        HTTP_REQUESTS_TOTAL.labels(route="/keys", method="POST", status="400").inc()
+        HTTP_REQUEST_DURATION_SECONDS.labels(route="/keys", method="POST").observe(
+            max((datetime.datetime.utcnow() - start).total_seconds(), 0)
+        )
         raise HTTPException(status_code=400, detail=f"Unknown provider: {req.provider}")
 
     _cache_user_key(req.user_id, req.provider, req.api_key)
     vault_ok = _sync_user_key_to_vault(req.user_id, req.provider, req.api_key)
+    KEY_OPS_TOTAL.labels(operation="save", provider=req.provider, status="success").inc()
+    HTTP_REQUESTS_TOTAL.labels(route="/keys", method="POST", status="200").inc()
+    HTTP_REQUEST_DURATION_SECONDS.labels(route="/keys", method="POST").observe(
+        max((datetime.datetime.utcnow() - start).total_seconds(), 0)
+    )
 
     return {
         "saved": True,
@@ -272,6 +329,7 @@ async def save_key(req: SaveKeyRequest):
 @app.get("/keys/{user_id}")
 async def get_keys(user_id: str):
     """Retrieve which providers have stored keys for this user."""
+    start = datetime.datetime.utcnow()
     redis_key = f"userkeys:{user_id}"
     stored = r.hgetall(redis_key)
     providers = {}
@@ -281,17 +339,28 @@ async def get_keys(user_id: str):
             providers[provider] = raw[:6] + "..." + raw[-4:]
         except Exception:
             providers[provider] = "***"
+    HTTP_REQUESTS_TOTAL.labels(route="/keys/{user_id}", method="GET", status="200").inc()
+    HTTP_REQUEST_DURATION_SECONDS.labels(route="/keys/{user_id}", method="GET").observe(
+        max((datetime.datetime.utcnow() - start).total_seconds(), 0)
+    )
     return {"user_id": user_id, "providers": providers}
 
 @app.delete("/keys/{user_id}/{provider}")
 async def delete_key(user_id: str, provider: str):
     """Remove a stored API key."""
+    start = datetime.datetime.utcnow()
     r.hdel(f"userkeys:{user_id}", provider)
     vault_ok = _delete_user_key_from_vault(user_id, provider)
+    KEY_OPS_TOTAL.labels(operation="delete", provider=provider, status="success").inc()
+    HTTP_REQUESTS_TOTAL.labels(route="/keys/{user_id}/{provider}", method="DELETE", status="200").inc()
+    HTTP_REQUEST_DURATION_SECONDS.labels(route="/keys/{user_id}/{provider}", method="DELETE").observe(
+        max((datetime.datetime.utcnow() - start).total_seconds(), 0)
+    )
     return {"deleted": True, "provider": provider, "vault": vault_ok}
 
 @app.get("/sessions/{user_id}")
 async def list_sessions(user_id: str):
+    start = datetime.datetime.utcnow()
     session_ids = r.zrevrange(_user_sessions_key(user_id), 0, 49)
     sessions = []
     for session_id in session_ids:
@@ -309,6 +378,10 @@ async def list_sessions(user_id: str):
             "updated_at": meta.get("updated_at", 0),
             "message_count": len(history),
         })
+    HTTP_REQUESTS_TOTAL.labels(route="/sessions/{user_id}", method="GET", status="200").inc()
+    HTTP_REQUEST_DURATION_SECONDS.labels(route="/sessions/{user_id}", method="GET").observe(
+        max((datetime.datetime.utcnow() - start).total_seconds(), 0)
+    )
     return {"user_id": user_id, "sessions": sessions}
 
 # ---------------------------------------------------------------------------
@@ -316,11 +389,20 @@ async def list_sessions(user_id: str):
 # ---------------------------------------------------------------------------
 @app.get("/session/{session_id}")
 async def get_session(session_id: str):
+    start = datetime.datetime.utcnow()
     data = r.get(_session_key(session_id))
     if not data:
+        HTTP_REQUESTS_TOTAL.labels(route="/session/{session_id}", method="GET", status="200").inc()
+        HTTP_REQUEST_DURATION_SECONDS.labels(route="/session/{session_id}", method="GET").observe(
+            max((datetime.datetime.utcnow() - start).total_seconds(), 0)
+        )
         return {"session_id": session_id, "history": [], "found": False}
     meta_raw = r.get(_session_meta_key(session_id))
     meta = json.loads(meta_raw) if meta_raw else {}
+    HTTP_REQUESTS_TOTAL.labels(route="/session/{session_id}", method="GET", status="200").inc()
+    HTTP_REQUEST_DURATION_SECONDS.labels(route="/session/{session_id}", method="GET").observe(
+        max((datetime.datetime.utcnow() - start).total_seconds(), 0)
+    )
     return {
         "session_id": session_id,
         "history": json.loads(data),
@@ -331,8 +413,13 @@ async def get_session(session_id: str):
 
 @app.delete("/session/{session_id}")
 async def clear_session(session_id: str):
+    start = datetime.datetime.utcnow()
     r.delete(_session_key(session_id))
     r.delete(_session_meta_key(session_id))
+    HTTP_REQUESTS_TOTAL.labels(route="/session/{session_id}", method="DELETE", status="200").inc()
+    HTTP_REQUEST_DURATION_SECONDS.labels(route="/session/{session_id}", method="DELETE").observe(
+        max((datetime.datetime.utcnow() - start).total_seconds(), 0)
+    )
     return {"deleted": True}
 
 # ---------------------------------------------------------------------------
@@ -344,10 +431,15 @@ async def list_models():
 
 @app.get("/health")
 def health():
+    start = datetime.datetime.utcnow()
     try:
         redis_ok = r.ping()
     except Exception:
         redis_ok = False
+    HTTP_REQUESTS_TOTAL.labels(route="/health", method="GET", status="200").inc()
+    HTTP_REQUEST_DURATION_SECONDS.labels(route="/health", method="GET").observe(
+        max((datetime.datetime.utcnow() - start).total_seconds(), 0)
+    )
     return {"status": "ok", "redis": redis_ok}
 
 @app.get("/redis/stats")
@@ -357,6 +449,7 @@ def redis_stats():
         info = r.info("memory")
         all_keys = r.keys("*")
         sessions = [k for k in all_keys if k.startswith("session:")]
+        ACTIVE_SESSIONS_GAUGE.set(len(sessions))
         user_keys = [k for k in all_keys if k.startswith("userkeys:")]
 
         session_details = []
@@ -379,3 +472,12 @@ def redis_stats():
         }
     except Exception as e:
         return {"error": str(e)}
+
+@app.get("/metrics")
+def metrics():
+    try:
+        all_keys = r.keys("*")
+        ACTIVE_SESSIONS_GAUGE.set(len([k for k in all_keys if k.startswith("session:")]))
+    except Exception:
+        ACTIVE_SESSIONS_GAUGE.set(0)
+    return PlainTextResponse(generate_latest().decode("utf-8"), media_type=CONTENT_TYPE_LATEST)

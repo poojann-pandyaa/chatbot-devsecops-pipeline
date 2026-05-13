@@ -53,3 +53,33 @@ docker compose --profile vault up -d --build
 ```
 
 Frontend APIs use `BACKEND_URL=http://chatbot-backend:8000` in compose.
+
+## Monitoring and Logging UIs
+
+Start full local stack:
+
+```bash
+cp .env.example .env
+# Set GRAFANA_ADMIN_PASSWORD (and optional Vault values) in .env
+docker compose up -d --build
+```
+
+UI endpoints:
+
+- Chatbot frontend: `http://localhost:3000`
+- Kibana (ELK logs): `http://localhost:5601`
+- Prometheus (metrics): `http://localhost:9090`
+- Grafana dashboards: `http://localhost:3001` (login from `.env`)
+
+Prometheus scrape targets included:
+
+- Frontend metrics: `chatbot-frontend:3000/api/metrics`
+- Backend metrics: `chatbot-backend:8000/metrics`
+- Redis exporter: `redis-exporter:9121/metrics`
+
+Kibana quick start:
+
+1. Open Kibana at `http://localhost:5601`
+2. Go to Discover
+3. Select/create data view `filebeat-*`
+4. Filter by container name fields (e.g. `container.name : "chatbot-backend"`)

@@ -3,5 +3,6 @@ uvicorn
 pydantic
 redis==7.0.1
 requests
+prometheus-client
 jaraco.context>=6.1.0
 wheel>=0.46.2
