@@ -16,7 +16,8 @@ spec:
     spec:
       containers:
       - name: chatbot-backend
-        image: poojann-pandyaa/chatbot-backend:latest
+        image: poojannpandyaa/chatbot-backend:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 8000
         env:
