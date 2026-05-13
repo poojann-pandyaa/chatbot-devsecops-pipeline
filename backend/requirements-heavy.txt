@@ -1,1 +1,0 @@
-# No heavy deps needed — all LLM calls are via external APIs
