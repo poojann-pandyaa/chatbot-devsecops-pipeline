@@ -30,6 +30,26 @@ pipeline {
             }
         }
 
+        stage('Security Scan') {
+            steps {
+                sh '''
+                    echo "=== Scanning Backend Image ==="
+                    trivy image --exit-code 0 \
+                                --severity HIGH,CRITICAL \
+                                --no-progress \
+                                --format table \
+                                ${BACKEND_IMAGE}:${IMAGE_TAG}
+
+                    echo "=== Scanning Frontend Image ==="
+                    trivy image --exit-code 0 \
+                                --severity HIGH,CRITICAL \
+                                --no-progress \
+                                --format table \
+                                ${FRONTEND_IMAGE}:${IMAGE_TAG}
+                '''
+            }
+        }
+
         stage('Push Images') {
             steps {
                 withCredentials([usernamePassword(
