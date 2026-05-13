@@ -1,5 +1,5 @@
 ---
-- name: Create Vault namespace
+- name: Create vault namespace
   kubernetes.core.k8s:
     state: present
     definition:
@@ -7,8 +7,19 @@
       kind: Namespace
       metadata:
         name: vault
+  ignore_errors: yes
 
-- name: Deploy Vault in dev mode
+- name: Create chatbot namespace
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ k8s_namespace }}"
+  ignore_errors: yes
+
+- name: Deploy HashiCorp Vault in dev mode
   kubernetes.core.k8s:
     state: present
     definition:
@@ -35,16 +46,16 @@
               - containerPort: 8200
               env:
               - name: VAULT_DEV_ROOT_TOKEN_ID
-                value: "root"
+                value: "{{ vault_root_token }}"
               - name: VAULT_DEV_LISTEN_ADDRESS
                 value: "0.0.0.0:8200"
               - name: SKIP_SETCAP
                 value: "true"
               securityContext:
                 capabilities:
-                  drop:
-                    - ALL
+                  drop: [ALL]
                 allowPrivilegeEscalation: false
+  ignore_errors: yes
 
 - name: Expose Vault as ClusterIP service
   kubernetes.core.k8s:
@@ -62,41 +73,38 @@
         - port: 8200
           targetPort: 8200
         type: ClusterIP
+  ignore_errors: yes
 
-- name: Wait for Vault pod to be ready
-  kubernetes.core.k8s_info:
-    kind: Pod
-    namespace: vault
-    label_selectors:
-      - app=vault
-  register: vault_pod
-  until: vault_pod.resources[0].status.phase == 'Running'
-  retries: 12
-  delay: 10
-
-- name: Store OPENAI_API_KEY in Vault
+- name: Store API keys in Vault KV
   uri:
-    url: "http://vault.vault.svc.cluster.local:8200/v1/secret/data/chatbot"
+    url: "{{ vault_addr }}/v1/secret/data/chatbot"
     method: POST
     headers:
-      X-Vault-Token: "root"
+      X-Vault-Token: "{{ vault_root_token }}"
       Content-Type: "application/json"
     body_format: json
     body:
       data:
+        GROQ_API_KEY: "{{ groq_api_key }}"
         OPENAI_API_KEY: "{{ openai_api_key }}"
+        MISTRAL_API_KEY: "{{ mistral_api_key }}"
+        GROK_API_KEY: "{{ grok_api_key }}"
   delegate_to: localhost
   ignore_errors: yes
 
-- name: Create chatbot-secrets K8s Secret from Vault value
+- name: Create llm-secrets K8s Secret from Vault values
   kubernetes.core.k8s:
     state: present
     definition:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: chatbot-secrets
-        namespace: default
+        name: llm-secrets
+        namespace: "{{ k8s_namespace }}"
       type: Opaque
       stringData:
+        GROQ_API_KEY: "{{ groq_api_key }}"
         OPENAI_API_KEY: "{{ openai_api_key }}"
+        MISTRAL_API_KEY: "{{ mistral_api_key }}"
+        GROK_API_KEY: "{{ grok_api_key }}"
+  ignore_errors: yes

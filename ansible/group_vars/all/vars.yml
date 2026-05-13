@@ -2,7 +2,4 @@
 k8s_namespace: chatbot-prod
 vault_addr: "http://vault.vault.svc.cluster.local:8200"
 vault_root_token: "root"
-groq_api_key: ""
-openai_api_key: ""
-mistral_api_key: ""
-grok_api_key: ""
+default_model: "groq"

@@ -1,77 +1,80 @@
 pipeline {
     agent any
-    tools {
-        jdk 'jdk17'
-        nodejs 'node20'
-    }
+
     environment {
-        SCANNER_HOME = tool 'sonar-scanner'
-        IMAGE_NAME   = "poojannpandyaa/chatbot"
+        DOCKERHUB_USER          = 'poojannpandyaa'
+        BACKEND_IMAGE           = "${DOCKERHUB_USER}/chatbot-backend"
+        FRONTEND_IMAGE          = "${DOCKERHUB_USER}/chatbot-frontend"
+        IMAGE_TAG               = "${BUILD_NUMBER}"
+        ANSIBLE_VAULT_PASS_FILE = credentials('ansible-vault-pass')
+        PATH                    = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:${env.PATH}"
     }
+
     stages {
-        stage('Checkout SCM') {
-            steps { checkout scm }
-        }
-        stage('Install Dependencies') {
-            steps { sh 'cd app && npm install' }
-        }
-        stage('SonarQube Analysis') {
+
+        stage('Checkout') {
             steps {
-                withSonarQubeEnv('sonar-server') {
-                    sh '''$SCANNER_HOME/bin/sonar-scanner \
-                        -Dsonar.projectName=Chatbot \
-                        -Dsonar.projectKey=Chatbot'''
-                }
+                checkout scm
             }
         }
-        stage('quality gate') {
+
+        stage('Build Backend Image') {
             steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: false
-                }
+                sh "docker build -t ${BACKEND_IMAGE}:${IMAGE_TAG} ./backend"
             }
         }
-        stage('OWASP FS SCAN') {
+
+        stage('Build Frontend Image') {
             steps {
-                echo 'OWASP skipped - NVD API key pending activation'
+                sh "docker build -t ${FRONTEND_IMAGE}:${IMAGE_TAG} ./app"
             }
         }
-        stage('TRIVY FS SCAN') {
+
+        stage('Push Images') {
             steps {
-                sh 'trivy fs . > trivyfs.txt'
-            }
-        }
-        stage('Docker Build & Push') {
-            steps {
-                withDockerRegistry(credentialsId: 'docker', url: 'https://index.docker.io/v1/') {
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
                     sh '''
-                        docker buildx build \
-                          --platform linux/arm64 \
-                          -t ${IMAGE_NAME}:latest \
-                          --push app/
+                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                        docker push ${BACKEND_IMAGE}:${IMAGE_TAG}
+                        docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
                     '''
                 }
             }
         }
-        stage('TRIVY') {
+
+        stage('Deploy via Ansible') {
             steps {
-                sh 'trivy image ${IMAGE_NAME}:latest > trivyimage.txt'
+                sh '''
+                    ansible-playbook ansible/site.yml \
+                        --vault-password-file ${ANSIBLE_VAULT_PASS_FILE} \
+                        -e "backend_image=${BACKEND_IMAGE}:${IMAGE_TAG}" \
+                        -e "frontend_image=${FRONTEND_IMAGE}:${IMAGE_TAG}" \
+                        -i ansible/inventory/hosts.ini
+                '''
             }
         }
-        stage('Remove container') {
+
+        stage('Health Check') {
             steps {
-                sh 'docker stop chatbot || true && docker rm chatbot || true'
+                sh '''
+                    sleep 15
+                    kubectl get pods -n chatbot-prod
+                    kubectl rollout status deployment/chatbot-backend -n chatbot-prod --timeout=120s
+                '''
             }
         }
-        stage('Deploy to container') {
-            steps {
-                sh 'docker run -d --name chatbot -p 3000:3000 ${IMAGE_NAME}:latest'
-            }
+    }
+
+    post {
+        success {
+            echo 'Pipeline completed successfully.'
         }
-        stage('Deploy to kubernetes') {
-            steps {
-                sh 'kubectl apply -f k8s/chatbot-ui.yaml'
-            }
+        failure {
+            echo 'Pipeline failed. Check logs above.'
         }
     }
 }

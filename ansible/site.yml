@@ -1,18 +1,12 @@
 ---
-- name: Configure Vault and inject secrets
+- name: Configure Vault and inject secrets into K8s
   hosts: localhost
   connection: local
   roles:
     - vault-config
 
-- name: Deploy chatbot to Kubernetes
+- name: Deploy chatbot stack to Kubernetes
   hosts: localhost
   connection: local
   roles:
     - k8s-deploy
-
-- name: Deploy chatbot via Docker (legacy)
-  hosts: k8s_workers
-  become: yes
-  roles:
-    - docker

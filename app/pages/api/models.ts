@@ -1,54 +1,19 @@
-import { OpenAIModel } from '@/types/openai';
-import { OPENAI_API_HOST } from '@/utils/app/const';
+import { OpenAIModelID, OpenAIModels } from '@/types/openai';
+import { NextRequest, NextResponse } from 'next/server';
 
 export const config = {
   runtime: 'edge',
 };
 
-const handler = async (req: Request): Promise<Response> => {
-  try {
-    const { key } = (await req.json()) as {
-      key: string;
-    };
+// Return a single dummy RAG model so the frontend never calls Groq/OpenAI
+const handler = async (req: NextRequest): Promise<NextResponse> => {
+  const ragModel = {
+    ...OpenAIModels[OpenAIModelID.GPT_3_5],
+    id: OpenAIModelID.GPT_3_5,
+    name: 'Reasoning-RAG (Gemma-2)',
+  };
 
-    const response = await fetch(`${OPENAI_API_HOST}/v1/models`, {
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${key ? key : process.env.OPENAI_API_KEY}`,
-        ...(process.env.OPENAI_ORGANIZATION && {
-          'OpenAI-Organization': process.env.OPENAI_ORGANIZATION,
-        })
-      },
-    });
-
-    if (response.status === 401) {
-      return new Response(response.body, {
-        status: 500,
-        headers: response.headers,
-      });
-    } else if (response.status !== 200) {
-      console.error(
-        `OpenAI API returned an error ${
-          response.status
-        }: ${await response.text()}`,
-      );
-      throw new Error('OpenAI API returned an error');
-    }
-
-    const json = await response.json();
-
-    const models: OpenAIModel[] = json.data.map((model: any) => ({
-      id: model.id,
-      name: model.id,
-      maxLength: 32000,
-      tokenLimit: 8000,
-    }));
-
-    return new Response(JSON.stringify(models), { status: 200 });
-  } catch (error) {
-    console.error(error);
-    return new Response('Error', { status: 500 });
-  }
+  return NextResponse.json([ragModel]);
 };
 
 export default handler;
