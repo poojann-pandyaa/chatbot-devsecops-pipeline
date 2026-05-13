@@ -2,7 +2,6 @@ import os
 import json
 import uuid
 import datetime
-import hashlib
 import base64
 
 import redis as redis_lib
@@ -102,6 +101,51 @@ MODEL_REGISTRY = {
 
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "grok")
 
+def _session_key(session_id: str) -> str:
+    return f"session:{session_id}"
+
+def _session_meta_key(session_id: str) -> str:
+    return f"sessionmeta:{session_id}"
+
+def _user_sessions_key(user_id: str) -> str:
+    return f"usersessions:{user_id}"
+
+def _build_title(message: str) -> str:
+    message = (message or "").strip()
+    if not message:
+        return "New Chat"
+    return message[:40] + ("..." if len(message) > 40 else "")
+
+def _cache_user_key(user_id: str, provider: str, api_key: str):
+    redis_key = f"userkeys:{user_id}"
+    r.hset(redis_key, provider, _obfuscate(api_key))
+    r.expire(redis_key, KEY_TTL)
+
+def _sync_user_key_to_vault(user_id: str, provider: str, api_key: str) -> bool:
+    vault_path = f"chatbot/userkeys/{user_id}"
+    existing = vault_read(vault_path)
+    existing[provider] = api_key
+    return vault_store(vault_path, existing)
+
+def _delete_user_key_from_vault(user_id: str, provider: str) -> bool:
+    vault_path = f"chatbot/userkeys/{user_id}"
+    existing = vault_read(vault_path)
+    if provider in existing:
+        del existing[provider]
+    return vault_store(vault_path, existing)
+
+def _record_session(user_id: str, session_id: str, message: str, model: str):
+    now = int(datetime.datetime.utcnow().timestamp())
+    meta = {
+        "session_id": session_id,
+        "title": _build_title(message),
+        "model": model,
+        "updated_at": now,
+    }
+    r.setex(_session_meta_key(session_id), SESSION_TTL, json.dumps(meta))
+    r.zadd(_user_sessions_key(user_id), {session_id: now})
+    r.expire(_user_sessions_key(user_id), SESSION_TTL)
+
 # ---------------------------------------------------------------------------
 # Resolve API key: user-stored (Redis) > request override > env var
 # ---------------------------------------------------------------------------
@@ -122,6 +166,10 @@ def _resolve_api_key(provider: str, user_id: str = None, override: str = None) -
                 return _deobfuscate(stored)
             except Exception:
                 pass
+        vault_stored = vault_read(f"chatbot/userkeys/{user_id}").get(provider)
+        if vault_stored:
+            _cache_user_key(user_id, provider, vault_stored)
+            return vault_stored
 
     # 3. Server-side env var (from K8s secret / Vault)
     env_key = os.getenv(cfg["api_key_env"])
@@ -178,7 +226,7 @@ class SaveKeyRequest(BaseModel):
 @app.post("/chat")
 async def chat(req: ChatRequest):
     session_id = req.session_id or str(uuid.uuid4())
-    key = f"session:{session_id}"
+    key = _session_key(session_id)
 
     # Load conversation history from Redis
     history_raw = r.get(key)
@@ -196,6 +244,8 @@ async def chat(req: ChatRequest):
     history.append({"role": "user",      "msg": req.message})
     history.append({"role": "assistant", "msg": answer})
     r.setex(key, SESSION_TTL, json.dumps(history))
+    if req.user_id:
+        _record_session(req.user_id, session_id, req.message, req.model)
 
     return {"session_id": session_id, "answer": answer, "model": req.model, "history": history}
 
@@ -208,17 +258,8 @@ async def save_key(req: SaveKeyRequest):
     if req.provider not in MODEL_REGISTRY:
         raise HTTPException(status_code=400, detail=f"Unknown provider: {req.provider}")
 
-    redis_key = f"userkeys:{req.user_id}"
-
-    # Store obfuscated key in Redis with TTL
-    r.hset(redis_key, req.provider, _obfuscate(req.api_key))
-    r.expire(redis_key, KEY_TTL)
-
-    # Sync to Vault for persistence
-    vault_path = f"chatbot/userkeys/{req.user_id}"
-    existing = vault_read(vault_path)
-    existing[req.provider] = req.api_key
-    vault_ok = vault_store(vault_path, existing)
+    _cache_user_key(req.user_id, req.provider, req.api_key)
+    vault_ok = _sync_user_key_to_vault(req.user_id, req.provider, req.api_key)
 
     return {
         "saved": True,
@@ -246,21 +287,52 @@ async def get_keys(user_id: str):
 async def delete_key(user_id: str, provider: str):
     """Remove a stored API key."""
     r.hdel(f"userkeys:{user_id}", provider)
-    return {"deleted": True, "provider": provider}
+    vault_ok = _delete_user_key_from_vault(user_id, provider)
+    return {"deleted": True, "provider": provider, "vault": vault_ok}
+
+@app.get("/sessions/{user_id}")
+async def list_sessions(user_id: str):
+    session_ids = r.zrevrange(_user_sessions_key(user_id), 0, 49)
+    sessions = []
+    for session_id in session_ids:
+        history_raw = r.get(_session_key(session_id))
+        meta_raw = r.get(_session_meta_key(session_id))
+        if not history_raw or not meta_raw:
+            r.zrem(_user_sessions_key(user_id), session_id)
+            continue
+        meta = json.loads(meta_raw)
+        history = json.loads(history_raw)
+        sessions.append({
+            "session_id": session_id,
+            "title": meta.get("title", "New Chat"),
+            "model": meta.get("model", DEFAULT_MODEL),
+            "updated_at": meta.get("updated_at", 0),
+            "message_count": len(history),
+        })
+    return {"user_id": user_id, "sessions": sessions}
 
 # ---------------------------------------------------------------------------
 # Routes - Session Management
 # ---------------------------------------------------------------------------
 @app.get("/session/{session_id}")
 async def get_session(session_id: str):
-    data = r.get(f"session:{session_id}")
+    data = r.get(_session_key(session_id))
     if not data:
         return {"session_id": session_id, "history": [], "found": False}
-    return {"session_id": session_id, "history": json.loads(data), "found": True}
+    meta_raw = r.get(_session_meta_key(session_id))
+    meta = json.loads(meta_raw) if meta_raw else {}
+    return {
+        "session_id": session_id,
+        "history": json.loads(data),
+        "found": True,
+        "model": meta.get("model", DEFAULT_MODEL),
+        "title": meta.get("title", "New Chat"),
+    }
 
 @app.delete("/session/{session_id}")
 async def clear_session(session_id: str):
-    r.delete(f"session:{session_id}")
+    r.delete(_session_key(session_id))
+    r.delete(_session_meta_key(session_id))
     return {"deleted": True}
 
 # ---------------------------------------------------------------------------
