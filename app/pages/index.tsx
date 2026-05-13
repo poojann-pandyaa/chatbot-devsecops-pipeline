@@ -25,6 +25,15 @@ interface ChatMessage {
   model?: string;
 }
 
+interface Conversation {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  sessionId: string;
+  model: string;
+  timestamp: number;
+}
+
 function renderMarkdown(text: string) {
   const lines = text.split('\n');
   const elements: JSX.Element[] = [];
@@ -77,11 +86,31 @@ export default function Home() {
   const [keyInputModel, setKeyInputModel] = useState('grok');
   const [keyInputValue, setKeyInputValue] = useState('');
   const [keysSaved, setKeysSaved]         = useState(false);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConvId, setActiveConvId]   = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef    = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+
+  // Auto-save current conversation to the list whenever messages change
+  useEffect(() => {
+    if (!sessionId || messages.length === 0) return;
+    const firstUserMsg = messages.find((m) => m.role === 'user');
+    const title = firstUserMsg ? firstUserMsg.content.slice(0, 40) + (firstUserMsg.content.length > 40 ? '...' : '') : 'New Chat';
+    setConversations((prev) => {
+      const existing = prev.findIndex((c) => c.sessionId === sessionId);
+      const conv: Conversation = { id: sessionId, title, messages: [...messages], sessionId, model, timestamp: Date.now() };
+      if (existing >= 0) {
+        const updated = [...prev];
+        updated[existing] = conv;
+        return updated;
+      }
+      return [conv, ...prev];
+    });
+    setActiveConvId(sessionId);
+  }, [messages, sessionId]);
 
   const saveKey = () => {
     if (!keyInputValue.trim()) return;
@@ -122,7 +151,29 @@ export default function Home() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input); }
   };
 
-  const newChat = () => { setMessages([]); setSessionId(null); };
+  const newChat = () => {
+    setMessages([]);
+    setSessionId(null);
+    setActiveConvId(null);
+  };
+
+  const loadConversation = (conv: Conversation) => {
+    setMessages(conv.messages);
+    setSessionId(conv.sessionId);
+    setActiveConvId(conv.sessionId);
+    setModel(conv.model);
+  };
+
+  const deleteConversation = (convId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setConversations((prev) => prev.filter((c) => c.id !== convId));
+    if (activeConvId === convId) {
+      setMessages([]);
+      setSessionId(null);
+      setActiveConvId(null);
+    }
+  };
+
   const currentModel = MODELS.find((m) => m.id === model);
 
   return (
@@ -150,6 +201,35 @@ export default function Home() {
                 + New Chat
               </button>
             </div>
+
+            {/* Conversation History */}
+            {conversations.length > 0 && (
+              <div className="px-3 py-2 border-t border-gray-800 flex-1 overflow-y-auto">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-1">History</div>
+                <div className="space-y-1">
+                  {conversations.map((conv) => (
+                    <button
+                      key={conv.id}
+                      onClick={() => loadConversation(conv)}
+                      className={`w-full text-left text-xs px-3 py-2 rounded-lg transition-colors flex items-center justify-between group ${
+                        activeConvId === conv.id ? 'bg-[#21262d] border border-gray-600' : 'hover:bg-[#21262d] border border-transparent'
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="text-gray-300 truncate">{conv.title}</div>
+                        <div className="text-gray-600 text-[10px] mt-0.5">
+                          {MODELS.find((m) => m.id === conv.model)?.label} · {conv.messages.length} msgs
+                        </div>
+                      </div>
+                      <span
+                        onClick={(e) => deleteConversation(conv.id, e)}
+                        className="text-gray-700 hover:text-red-400 opacity-0 group-hover:opacity-100 ml-2 text-sm transition-opacity cursor-pointer"
+                      >×</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Default Model */}
             <div className="px-4 py-3 border-t border-gray-800">

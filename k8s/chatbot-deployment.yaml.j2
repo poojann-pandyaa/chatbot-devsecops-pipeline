@@ -59,17 +59,15 @@ spec:
         env:
         - name: REDIS_HOST
           value: "redis-service"
-        - name: OPENAI_API_HOST
-          value: "https://api.groq.com/openai"
-        - name: OPENAI_API_KEY
+        - name: DEFAULT_MODEL
+          value: "grok"
+        - name: GROK_API_KEY
           valueFrom:
             secretKeyRef:
-              name: chatbot-secrets
-              key: OPENAI_API_KEY
-        - name: OPENAI_API_MODEL
-          value: "llama-3.3-70b-versatile"
-        - name: HF_TOKEN
+              name: llm-secrets
+              key: GROK_API_KEY
+        - name: GROQ_API_KEY
           valueFrom:
             secretKeyRef:
-              name: hf-secret
-              key: HF_TOKEN
+              name: llm-secrets
+              key: GROQ_API_KEY

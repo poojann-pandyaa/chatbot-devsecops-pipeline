@@ -16,3 +16,8 @@ build/
 
 # OS files
 .DS_Store
+
+# Models and large binaries
+merged-chatbot-gemma2/
+__pycache__/
+*.pyc
