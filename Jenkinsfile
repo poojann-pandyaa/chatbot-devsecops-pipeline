@@ -7,6 +7,7 @@ pipeline {
         FRONTEND_IMAGE          = "${DOCKERHUB_USER}/chatbot-frontend"
         IMAGE_TAG               = "${BUILD_NUMBER}"
         ANSIBLE_VAULT_PASS_FILE = credentials('ansible-vault-pass')
+        PATH                    = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:${env.PATH}"
     }
 
     stages {
@@ -51,7 +52,8 @@ pipeline {
                     ansible-playbook ansible/site.yml \
                         --vault-password-file ${ANSIBLE_VAULT_PASS_FILE} \
                         -e "backend_image=${BACKEND_IMAGE}:${IMAGE_TAG}" \
-                        -e "frontend_image=${FRONTEND_IMAGE}:${IMAGE_TAG}"
+                        -e "frontend_image=${FRONTEND_IMAGE}:${IMAGE_TAG}" \
+                        -i ansible/inventory/hosts.ini
                 '''
             }
         }
