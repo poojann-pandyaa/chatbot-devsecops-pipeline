@@ -35,3 +35,21 @@ tag, then runs Ansible as the Kubernetes deployment driver:
 ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml \
   --extra-vars "image_tag=<git-sha> git_commit=<full-git-sha> namespace=chatbot-prod"
 ```
+
+## Local Docker Compose (with optional Vault)
+
+Run without Vault (Redis-only key cache):
+
+```bash
+docker compose up -d --build
+```
+
+Run with Vault profile (persistent key store + Redis cache):
+
+```bash
+cp .env.example .env
+# Set VAULT_TOKEN and optionally VAULT_DEV_ROOT_TOKEN_ID in .env
+docker compose --profile vault up -d --build
+```
+
+Frontend APIs use `BACKEND_URL=http://chatbot-backend:8000` in compose.

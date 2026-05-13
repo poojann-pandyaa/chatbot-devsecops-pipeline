@@ -67,6 +67,24 @@ services:
       - elk
     restart: unless-stopped
 
+  # -- Vault (optional; start with --profile vault) ----------------------------
+  vault:
+    image: hashicorp/vault:1.15
+    container_name: vault
+    command: server -dev
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - "8200:8200"
+    environment:
+      - VAULT_DEV_ROOT_TOKEN_ID=${VAULT_DEV_ROOT_TOKEN_ID:-}
+      - VAULT_ADDR=http://0.0.0.0:8200
+    profiles:
+      - vault
+    networks:
+      - elk
+    restart: unless-stopped
+
   # -- Chatbot RAG Backend -----------------------------------------------------
   chatbot-backend:
     build:
@@ -83,8 +101,13 @@ services:
     networks:
       - elk
     depends_on:
-      - redis
-      - elasticsearch
+      redis:
+        condition: service_started
+      elasticsearch:
+        condition: service_healthy
+      vault:
+        condition: service_started
+        required: false
     restart: unless-stopped
 
   # -- Chatbot Frontend --------------------------------------------------------
