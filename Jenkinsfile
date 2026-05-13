@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_USER          = 'poojann-pandyaa'
+        DOCKERHUB_USER          = 'poojannpandyaa'
         BACKEND_IMAGE           = "${DOCKERHUB_USER}/chatbot-backend"
         FRONTEND_IMAGE          = "${DOCKERHUB_USER}/chatbot-frontend"
         IMAGE_TAG               = "${BUILD_NUMBER}"
