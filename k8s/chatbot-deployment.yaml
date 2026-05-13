@@ -16,21 +16,14 @@ spec:
     spec:
       containers:
       - name: chatbot-backend
-        image: chatbot-backend:latest
-        imagePullPolicy: Never
+        image: poojann-pandyaa/chatbot-backend:latest
         ports:
-        - containerPort: 3000
+        - containerPort: 8000
         env:
         - name: REDIS_HOST
           value: "redis-service"
         - name: DEFAULT_MODEL
           value: "groq"
-        - name: GROK_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: llm-secrets
-              key: GROK_API_KEY
-              optional: true
         - name: GROQ_API_KEY
           valueFrom:
             secretKeyRef:
@@ -49,6 +42,12 @@ spec:
               name: llm-secrets
               key: MISTRAL_API_KEY
               optional: true
+        - name: GROK_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: llm-secrets
+              key: GROK_API_KEY
+              optional: true
         resources:
           requests:
             cpu: "250m"
@@ -59,7 +58,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /health
-            port: 3000
+            port: 8000
           initialDelaySeconds: 10
           periodSeconds: 10
           failureThreshold: 5
@@ -73,5 +72,5 @@ spec:
     app: chatbot-backend
   ports:
   - port: 80
-    targetPort: 3000
+    targetPort: 8000
   type: ClusterIP

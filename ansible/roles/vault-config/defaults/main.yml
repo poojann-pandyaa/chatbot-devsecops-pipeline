@@ -1,5 +1,9 @@
 ---
-# Override this variable when running the playbook:
-# ansible-playbook site.yml -e "openai_api_key=gsk_your_key"
-openai_api_key: ""
 namespace: chatbot-prod
+vault_addr: "http://vault.vault.svc.cluster.local:8200"
+vault_root_token: "root"
+# API keys — override via ansible-vault encrypted group_vars/all/secrets.yml
+groq_api_key: ""
+openai_api_key: ""
+mistral_api_key: ""
+grok_api_key: ""

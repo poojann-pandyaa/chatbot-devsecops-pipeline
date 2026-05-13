@@ -1,51 +1,67 @@
 ---
-- name: Apply chatbot namespace
+- name: Apply namespace
   kubernetes.core.k8s:
     state: present
     src: "{{ playbook_dir }}/../k8s/namespace.yaml"
   ignore_errors: yes
 
-- name: Apply chatbot deployment manifest
+- name: Apply Redis deployment
   kubernetes.core.k8s:
     state: present
-    namespace: "{{ namespace | default('chatbot-prod') }}"
-    template: "{{ playbook_dir }}/../k8s/chatbot-deployment.yaml.j2"
+    namespace: "{{ namespace }}"
+    src: "{{ playbook_dir }}/../k8s/redis-deployment.yaml"
   ignore_errors: yes
 
-- name: Apply chatbot service manifest
+- name: Apply backend deployment
   kubernetes.core.k8s:
     state: present
-    namespace: "{{ namespace | default('chatbot-prod') }}"
+    namespace: "{{ namespace }}"
+    src: "{{ playbook_dir }}/../k8s/chatbot-deployment.yaml"
+  ignore_errors: yes
+
+- name: Apply frontend deployment
+  kubernetes.core.k8s:
+    state: present
+    namespace: "{{ namespace }}"
+    src: "{{ playbook_dir }}/../k8s/frontend-deployment.yaml"
+  ignore_errors: yes
+
+- name: Apply backend service
+  kubernetes.core.k8s:
+    state: present
+    namespace: "{{ namespace }}"
     src: "{{ playbook_dir }}/../k8s/service.yaml"
   ignore_errors: yes
 
-- name: Apply chatbot ingress manifest
+- name: Apply HPA
   kubernetes.core.k8s:
     state: present
-    namespace: "{{ namespace | default('chatbot-prod') }}"
-    src: "{{ playbook_dir }}/../k8s/ingress.yaml"
-  ignore_errors: yes
-
-- name: Apply chatbot pod disruption budget
-  kubernetes.core.k8s:
-    state: present
-    namespace: "{{ namespace | default('chatbot-prod') }}"
-    src: "{{ playbook_dir }}/../k8s/pdb.yaml"
-  ignore_errors: yes
-
-- name: Apply HPA manifest
-  kubernetes.core.k8s:
-    state: present
-    namespace: "{{ namespace | default('chatbot-prod') }}"
+    namespace: "{{ namespace }}"
     src: "{{ playbook_dir }}/../k8s/hpa.yaml"
   ignore_errors: yes
 
-- name: Wait for chatbot deployment rollout
-  ansible.builtin.command: kubectl rollout status deployment/chatbot -n {{ namespace | default('chatbot-prod') }} --timeout=120s
+- name: Apply ingress
+  kubernetes.core.k8s:
+    state: present
+    namespace: "{{ namespace }}"
+    src: "{{ playbook_dir }}/../k8s/ingress.yaml"
+  ignore_errors: yes
+
+- name: Apply pod disruption budget
+  kubernetes.core.k8s:
+    state: present
+    namespace: "{{ namespace }}"
+    src: "{{ playbook_dir }}/../k8s/pdb.yaml"
+  ignore_errors: yes
+
+- name: Wait for backend rollout
+  ansible.builtin.command: >-
+    kubectl rollout status deployment/chatbot-backend
+    -n {{ namespace }} --timeout=120s
   register: rollout_result
   changed_when: false
   ignore_errors: yes
 
-- name: Print deployment status
+- name: Print rollout status
   debug:
-    msg: "{{ rollout_result.stdout | default('Kubernetes not available in local environment') }}"
+    msg: "{{ rollout_result.stdout | default('Rollout status unavailable') }}"
