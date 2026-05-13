@@ -32,99 +32,80 @@ pipeline {
 
         stage('Security Scan') {
             steps {
-                script {
-                    echo '================================================================'
-                    echo '           TRIVY SECURITY SCAN - CHATBOT DEVSECOPS             '
-                    echo '================================================================'
+                sh '''
+                    echo "================================================================"
+                    echo "        TRIVY SECURITY SCAN - CHATBOT DEVSECOPS               "
+                    echo "================================================================"
 
-                    // ── Backend scan ──────────────────────────────────────────────
-                    echo ''
-                    echo '>>> Scanning: chatbot-backend'
-                    def backendJson = sh(
-                        script: "trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress --format json ${BACKEND_IMAGE}:${IMAGE_TAG} 2>/dev/null",
-                        returnStdout: true
-                    ).trim()
+                    # ── Backend scan ──────────────────────────────────────────────────
+                    echo ""
+                    echo ">>> Scanning: chatbot-backend"
+                    trivy image --exit-code 0 \
+                                --severity HIGH,CRITICAL \
+                                --no-progress \
+                                --format table \
+                                ${BACKEND_IMAGE}:${IMAGE_TAG} 2>/dev/null > /tmp/backend_scan.txt || true
 
-                    def backendReport = readJSON text: backendJson
-                    int bCritical = 0
-                    int bHigh     = 0
-                    def bCVEs = []
+                    B_CRITICAL=$(grep -c "CRITICAL" /tmp/backend_scan.txt || echo 0)
+                    B_HIGH=$(grep -c "HIGH" /tmp/backend_scan.txt || echo 0)
 
-                    backendReport.Results.each { result ->
-                        result.Vulnerabilities?.each { v ->
-                            if (v.Severity == 'CRITICAL') { bCritical++; bCVEs << "[CRITICAL] ${v.VulnerabilityID} - ${v.PkgName}: ${v.Title}" }
-                            if (v.Severity == 'HIGH')     { bHigh++;     bCVEs << "[HIGH]     ${v.VulnerabilityID} - ${v.PkgName}: ${v.Title}" }
-                        }
-                    }
+                    echo ""
+                    echo "+-------------------------------------------------+"
+                    echo "|   BACKEND IMAGE SCAN RESULTS                    |"
+                    echo "|   Image : ${BACKEND_IMAGE}:${IMAGE_TAG}         |"
+                    printf "|   CRITICAL : %-3s                              |\n" "$B_CRITICAL"
+                    printf "|   HIGH     : %-3s                              |\n" "$B_HIGH"
+                    echo "+-------------------------------------------------+"
 
-                    echo """\n┌─────────────────────────────────────────────┐
-│  BACKEND IMAGE SCAN RESULTS                 │
-│  Image : ${BACKEND_IMAGE}:${IMAGE_TAG}      │
-│  🔴 CRITICAL : ${bCritical}                 │
-│  🟠 HIGH     : ${bHigh}                     │
-└─────────────────────────────────────────────┘"""
+                    echo ""
+                    echo "--- Backend CVE Details ---"
+                    grep -E "(CRITICAL|HIGH)" /tmp/backend_scan.txt | grep -v "^\\s*$" || echo "No HIGH/CRITICAL found in backend."
 
-                    if (bCVEs) {
-                        echo '\n--- Backend CVE Details ---'
-                        bCVEs.each { echo it }
-                    } else {
-                        echo '✅ No HIGH/CRITICAL vulnerabilities found in backend!'
-                    }
+                    # ── Frontend scan ─────────────────────────────────────────────────
+                    echo ""
+                    echo ">>> Scanning: chatbot-frontend"
+                    trivy image --exit-code 0 \
+                                --severity HIGH,CRITICAL \
+                                --no-progress \
+                                --format table \
+                                ${FRONTEND_IMAGE}:${IMAGE_TAG} 2>/dev/null > /tmp/frontend_scan.txt || true
 
-                    // ── Frontend scan ─────────────────────────────────────────────
-                    echo ''
-                    echo '>>> Scanning: chatbot-frontend'
-                    def frontendJson = sh(
-                        script: "trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress --format json ${FRONTEND_IMAGE}:${IMAGE_TAG} 2>/dev/null",
-                        returnStdout: true
-                    ).trim()
+                    F_CRITICAL=$(grep -c "CRITICAL" /tmp/frontend_scan.txt || echo 0)
+                    F_HIGH=$(grep -c "HIGH" /tmp/frontend_scan.txt || echo 0)
 
-                    def frontendReport = readJSON text: frontendJson
-                    int fCritical = 0
-                    int fHigh     = 0
-                    def fCVEs = []
+                    echo ""
+                    echo "+-------------------------------------------------+"
+                    echo "|   FRONTEND IMAGE SCAN RESULTS                   |"
+                    echo "|   Image : ${FRONTEND_IMAGE}:${IMAGE_TAG}        |"
+                    printf "|   CRITICAL : %-3s                              |\n" "$F_CRITICAL"
+                    printf "|   HIGH     : %-3s                              |\n" "$F_HIGH"
+                    echo "+-------------------------------------------------+"
 
-                    frontendReport.Results.each { result ->
-                        result.Vulnerabilities?.each { v ->
-                            if (v.Severity == 'CRITICAL') { fCritical++; fCVEs << "[CRITICAL] ${v.VulnerabilityID} - ${v.PkgName}: ${v.Title}" }
-                            if (v.Severity == 'HIGH')     { fHigh++;     fCVEs << "[HIGH]     ${v.VulnerabilityID} - ${v.PkgName}: ${v.Title}" }
-                        }
-                    }
+                    echo ""
+                    echo "--- Frontend CVE Details (first 20 lines) ---"
+                    grep -E "(CRITICAL|HIGH)" /tmp/frontend_scan.txt | head -20 || echo "No HIGH/CRITICAL found in frontend."
 
-                    echo """\n┌─────────────────────────────────────────────┐
-│  FRONTEND IMAGE SCAN RESULTS                │
-│  Image : ${FRONTEND_IMAGE}:${IMAGE_TAG}     │
-│  🔴 CRITICAL : ${fCritical}                 │
-│  🟠 HIGH     : ${fHigh}                     │
-└─────────────────────────────────────────────┘"""
+                    # ── Overall Summary ───────────────────────────────────────────────
+                    TOTAL_CRITICAL=$((B_CRITICAL + F_CRITICAL))
+                    TOTAL_HIGH=$((B_HIGH + F_HIGH))
+                    TOTAL=$((TOTAL_CRITICAL + TOTAL_HIGH))
 
-                    if (fCVEs) {
-                        echo '\n--- Frontend CVE Details ---'
-                        fCVEs.each { echo it }
-                    } else {
-                        echo '✅ No HIGH/CRITICAL vulnerabilities found in frontend!'
-                    }
+                    echo ""
+                    echo "================================================================"
+                    echo "  SECURITY SCAN SUMMARY"
+                    echo "================================================================"
+                    printf "  Backend  -> CRITICAL: %-3s | HIGH: %s\n" "$B_CRITICAL" "$B_HIGH"
+                    printf "  Frontend -> CRITICAL: %-3s | HIGH: %s\n" "$F_CRITICAL" "$F_HIGH"
+                    echo "  ------------------------------------------------"
+                    printf "  TOTAL    -> CRITICAL: %-3s | HIGH: %-3s | TOTAL: %s\n" "$TOTAL_CRITICAL" "$TOTAL_HIGH" "$TOTAL"
+                    echo "================================================================"
 
-                    // ── Overall Summary ───────────────────────────────────────────
-                    int totalCritical = bCritical + fCritical
-                    int totalHigh     = bHigh + fHigh
-                    int totalVulns    = totalCritical + totalHigh
-
-                    echo """\n================================================================
-  SECURITY SCAN SUMMARY
-================================================================
-  Backend  → CRITICAL: ${bCritical}  |  HIGH: ${bHigh}
-  Frontend → CRITICAL: ${fCritical}  |  HIGH: ${fHigh}
-  ──────────────────────────────────────────────────
-  TOTAL    → CRITICAL: ${totalCritical}  |  HIGH: ${totalHigh}  |  TOTAL: ${totalVulns}
-================================================================"""
-
-                    if (totalCritical > 0) {
-                        echo "⚠️  WARNING: ${totalCritical} CRITICAL vulnerabilities detected! Review before production."
-                    } else {
-                        echo "✅ No CRITICAL vulnerabilities found."
-                    }
-                }
+                    if [ "$TOTAL_CRITICAL" -gt 0 ]; then
+                        echo "WARNING: $TOTAL_CRITICAL CRITICAL vulnerabilities detected! Review before production."
+                    else
+                        echo "OK: No CRITICAL vulnerabilities found."
+                    fi
+                '''
             }
         }
 
@@ -147,10 +128,10 @@ pipeline {
         stage('Deploy via Ansible') {
             steps {
                 sh '''
-                    ansible-playbook ansible/site.yml \\
-                        --vault-password-file ${ANSIBLE_VAULT_PASS_FILE} \\
-                        -e "backend_image=${BACKEND_IMAGE}:${IMAGE_TAG}" \\
-                        -e "frontend_image=${FRONTEND_IMAGE}:${IMAGE_TAG}" \\
+                    ansible-playbook ansible/site.yml \
+                        --vault-password-file ${ANSIBLE_VAULT_PASS_FILE} \
+                        -e "backend_image=${BACKEND_IMAGE}:${IMAGE_TAG}" \
+                        -e "frontend_image=${FRONTEND_IMAGE}:${IMAGE_TAG}" \
                         -i ansible/inventory/hosts.ini
                 '''
             }
