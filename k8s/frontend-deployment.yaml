@@ -23,10 +23,10 @@ spec:
         - name: http
           containerPort: 3000
         env:
-        - name: RAG_BACKEND_URL
-          value: "http://chatbot-service/chat"
+        - name: BACKEND_URL
+          value: "http://chatbot-service"
         - name: DEFAULT_SYSTEM_PROMPT
-          value: "You are a Stack Overflow expert powered by a Reasoning-RAG pipeline."
+          value: "You are a helpful AI assistant."
         resources:
           requests:
             cpu: "100m"
