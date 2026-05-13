@@ -69,6 +69,8 @@ services:
 
   # -- Chatbot RAG Backend -----------------------------------------------------
   chatbot-backend:
+    build:
+      context: ./backend
     image: poojannpandyaa/chatbot-backend:latest
     container_name: chatbot-backend
     ports:
@@ -76,6 +78,8 @@ services:
     environment:
       - REDIS_HOST=redis
       - DEFAULT_MODEL=groq
+      - VAULT_ADDR=${VAULT_ADDR:-http://vault:8200}
+      - VAULT_TOKEN=${VAULT_TOKEN:-}
     networks:
       - elk
     depends_on:
@@ -85,12 +89,14 @@ services:
 
   # -- Chatbot Frontend --------------------------------------------------------
   chatbot-frontend:
+    build:
+      context: ./app
     image: poojannpandyaa/chatbot-frontend:latest
     container_name: chatbot-frontend
     ports:
       - "3000:3000"
     environment:
-      - RAG_BACKEND_URL=http://chatbot-backend:8000/chat
+      - BACKEND_URL=http://chatbot-backend:8000
     networks:
       - elk
     depends_on:
