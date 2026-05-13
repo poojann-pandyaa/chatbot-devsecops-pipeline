@@ -21,3 +21,4 @@ build/
 merged-chatbot-gemma2/
 __pycache__/
 *.pyc
+jenkins-cli.jar
