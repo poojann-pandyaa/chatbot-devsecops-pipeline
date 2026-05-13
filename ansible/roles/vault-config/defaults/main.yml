@@ -1,8 +1,7 @@
 ---
-namespace: chatbot-prod
+k8s_namespace: chatbot-prod
 vault_addr: "http://vault.vault.svc.cluster.local:8200"
 vault_root_token: "root"
-# API keys — override via ansible-vault encrypted group_vars/all/secrets.yml
 groq_api_key: ""
 openai_api_key: ""
 mistral_api_key: ""

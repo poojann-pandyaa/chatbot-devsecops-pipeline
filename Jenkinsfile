@@ -2,10 +2,10 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_USER    = 'poojann-pandyaa'
-        BACKEND_IMAGE     = "${DOCKERHUB_USER}/chatbot-backend"
-        FRONTEND_IMAGE    = "${DOCKERHUB_USER}/chatbot-frontend"
-        IMAGE_TAG         = "${BUILD_NUMBER}"
+        DOCKERHUB_USER          = 'poojann-pandyaa'
+        BACKEND_IMAGE           = "${DOCKERHUB_USER}/chatbot-backend"
+        FRONTEND_IMAGE          = "${DOCKERHUB_USER}/chatbot-frontend"
+        IMAGE_TAG               = "${BUILD_NUMBER}"
         ANSIBLE_VAULT_PASS_FILE = credentials('ansible-vault-pass')
     }
 

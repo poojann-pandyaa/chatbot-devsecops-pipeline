@@ -8,56 +8,56 @@
 - name: Apply Redis deployment
   kubernetes.core.k8s:
     state: present
-    namespace: "{{ namespace }}"
+    namespace: "{{ k8s_namespace }}"
     src: "{{ playbook_dir }}/../k8s/redis-deployment.yaml"
   ignore_errors: yes
 
 - name: Apply backend deployment
   kubernetes.core.k8s:
     state: present
-    namespace: "{{ namespace }}"
+    namespace: "{{ k8s_namespace }}"
     src: "{{ playbook_dir }}/../k8s/chatbot-deployment.yaml"
   ignore_errors: yes
 
 - name: Apply frontend deployment
   kubernetes.core.k8s:
     state: present
-    namespace: "{{ namespace }}"
+    namespace: "{{ k8s_namespace }}"
     src: "{{ playbook_dir }}/../k8s/frontend-deployment.yaml"
   ignore_errors: yes
 
 - name: Apply backend service
   kubernetes.core.k8s:
     state: present
-    namespace: "{{ namespace }}"
+    namespace: "{{ k8s_namespace }}"
     src: "{{ playbook_dir }}/../k8s/service.yaml"
   ignore_errors: yes
 
 - name: Apply HPA
   kubernetes.core.k8s:
     state: present
-    namespace: "{{ namespace }}"
+    namespace: "{{ k8s_namespace }}"
     src: "{{ playbook_dir }}/../k8s/hpa.yaml"
   ignore_errors: yes
 
 - name: Apply ingress
   kubernetes.core.k8s:
     state: present
-    namespace: "{{ namespace }}"
+    namespace: "{{ k8s_namespace }}"
     src: "{{ playbook_dir }}/../k8s/ingress.yaml"
   ignore_errors: yes
 
 - name: Apply pod disruption budget
   kubernetes.core.k8s:
     state: present
-    namespace: "{{ namespace }}"
+    namespace: "{{ k8s_namespace }}"
     src: "{{ playbook_dir }}/../k8s/pdb.yaml"
   ignore_errors: yes
 
 - name: Wait for backend rollout
   ansible.builtin.command: >-
     kubectl rollout status deployment/chatbot-backend
-    -n {{ namespace }} --timeout=120s
+    -n {{ k8s_namespace }} --timeout=120s
   register: rollout_result
   changed_when: false
   ignore_errors: yes
