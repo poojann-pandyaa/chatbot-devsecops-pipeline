@@ -34,26 +34,30 @@ pipeline {
             steps {
                 sh '''
 #!/bin/bash
-set -e
-
 SEP="########################################################################"
 DIV="------------------------------------------------------------------------"
 
+count_severity() {
+    local file="$1" sev="$2"
+    local n
+    n=$(grep -c "$sev" "$file" 2>/dev/null) || n=0
+    printf '%s' "$n"
+}
+
 echo ""
 echo "$SEP"
 echo "#                                                                      #"
-echo "#            TRIVY CONTAINER SECURITY SCAN REPORT                     #"
-echo "#            Build : ${BUILD_NUMBER}                                  #"
+echo "#           TRIVY CONTAINER SECURITY SCAN REPORT                      #"
+echo "#           Build: ${BUILD_NUMBER}                                    #"
 echo "#                                                                      #"
 echo "$SEP"
 echo ""
 
-# =====================================================================
+# ===========================================================================
 # BACKEND SCAN
-# =====================================================================
+# ===========================================================================
 echo "$DIV"
-echo "  [1/2] SCANNING BACKEND IMAGE"
-echo "  Image: ${BACKEND_IMAGE}:${IMAGE_TAG}"
+echo "  [1/2]  BACKEND IMAGE  >>  ${BACKEND_IMAGE}:${IMAGE_TAG}"
 echo "$DIV"
 
 trivy image \
@@ -61,44 +65,42 @@ trivy image \
     --severity HIGH,CRITICAL \
     --no-progress \
     --format table \
-    ${BACKEND_IMAGE}:${IMAGE_TAG} 2>/dev/null > /tmp/be_full.txt || true
+    ${BACKEND_IMAGE}:${IMAGE_TAG} 2>/dev/null > /tmp/be_full.txt
 
-# Extract just the vulnerability detail lines (skip OS/pkg headers)
-grep -E "^[|]" /tmp/be_full.txt | \
-    grep -E "(HIGH|CRITICAL)" > /tmp/be_cves.txt || true
+grep -E "^[|]" /tmp/be_full.txt | grep -E "(HIGH|CRITICAL)" > /tmp/be_cves.txt || true
 
-B_CRIT=$(grep -c "CRITICAL" /tmp/be_cves.txt 2>/dev/null || echo 0)
-B_HIGH=$(grep -c "HIGH"     /tmp/be_cves.txt 2>/dev/null || echo 0)
+B_CRIT=$(count_severity /tmp/be_cves.txt CRITICAL)
+B_HIGH=$(count_severity /tmp/be_cves.txt HIGH)
 
 if [ -s /tmp/be_cves.txt ]; then
     echo ""
-    echo "  CVE-ID              SEVERITY   PACKAGE          INSTALLED    FIXED       "
-    echo "  ------------------  ---------  ---------------  -----------  -----------"
+    printf "  %-22s  %-10s  %-18s  %-13s  %s\n" \
+           "CVE-ID" "SEVERITY" "PACKAGE" "INSTALLED" "FIXED"
+    printf "  %-22s  %-10s  %-18s  %-13s  %s\n" \
+           "----------------------" "----------" "------------------" "-------------" "-----------"
     while IFS= read -r line; do
-        # Pull columns from the trivy table row
-        CVE=$(echo    "$line" | awk -F"|" "{print \$2}" | xargs)
-        SEV=$(echo    "$line" | awk -F"|" "{print \$3}" | xargs)
-        PKG=$(echo    "$line" | awk -F"|" "{print \$1}" | xargs)
-        INST=$(echo   "$line" | awk -F"|" "{print \$5}" | xargs)
-        FIXED=$(echo  "$line" | awk -F"|" "{print \$6}" | xargs)
-        printf "  %-20s  %-9s  %-15s  %-11s  %-11s\n" \
+        CVE=$(  echo "$line" | awk -F"|" "{print \$2}" | xargs 2>/dev/null)
+        SEV=$(  echo "$line" | awk -F"|" "{print \$3}" | xargs 2>/dev/null)
+        PKG=$(  echo "$line" | awk -F"|" "{print \$1}" | xargs 2>/dev/null)
+        INST=$( echo "$line" | awk -F"|" "{print \$5}" | xargs 2>/dev/null)
+        FIXED=$(echo "$line" | awk -F"|" "{print \$6}" | xargs 2>/dev/null)
+        printf "  %-22s  %-10s  %-18s  %-13s  %s\n" \
                "$CVE" "$SEV" "$PKG" "$INST" "$FIXED"
     done < /tmp/be_cves.txt
 else
     echo ""
-    echo "  >> No HIGH or CRITICAL vulnerabilities found in backend image."
+    echo "  >> Clean: No HIGH/CRITICAL vulnerabilities found."
 fi
 
 echo ""
-echo "  BACKEND TOTALS:  CRITICAL = $B_CRIT   HIGH = $B_HIGH"
+echo "  BACKEND   -->  CRITICAL: ${B_CRIT}   HIGH: ${B_HIGH}"
 echo ""
 
-# =====================================================================
+# ===========================================================================
 # FRONTEND SCAN
-# =====================================================================
+# ===========================================================================
 echo "$DIV"
-echo "  [2/2] SCANNING FRONTEND IMAGE"
-echo "  Image: ${FRONTEND_IMAGE}:${IMAGE_TAG}"
+echo "  [2/2]  FRONTEND IMAGE  >>  ${FRONTEND_IMAGE}:${IMAGE_TAG}"
 echo "$DIV"
 
 trivy image \
@@ -106,64 +108,64 @@ trivy image \
     --severity HIGH,CRITICAL \
     --no-progress \
     --format table \
-    ${FRONTEND_IMAGE}:${IMAGE_TAG} 2>/dev/null > /tmp/fe_full.txt || true
+    ${FRONTEND_IMAGE}:${IMAGE_TAG} 2>/dev/null > /tmp/fe_full.txt
 
-grep -E "^[|]" /tmp/fe_full.txt | \
-    grep -E "(HIGH|CRITICAL)" > /tmp/fe_cves.txt || true
+grep -E "^[|]" /tmp/fe_full.txt | grep -E "(HIGH|CRITICAL)" > /tmp/fe_cves.txt || true
 
-F_CRIT=$(grep -c "CRITICAL" /tmp/fe_cves.txt 2>/dev/null || echo 0)
-F_HIGH=$(grep -c "HIGH"     /tmp/fe_cves.txt 2>/dev/null || echo 0)
+F_CRIT=$(count_severity /tmp/fe_cves.txt CRITICAL)
+F_HIGH=$(count_severity /tmp/fe_cves.txt HIGH)
 
 if [ -s /tmp/fe_cves.txt ]; then
     echo ""
-    echo "  CVE-ID              SEVERITY   PACKAGE          INSTALLED    FIXED       "
-    echo "  ------------------  ---------  ---------------  -----------  -----------"
-    # Show top 30 to keep output readable
+    printf "  %-22s  %-10s  %-18s  %-13s  %s\n" \
+           "CVE-ID" "SEVERITY" "PACKAGE" "INSTALLED" "FIXED"
+    printf "  %-22s  %-10s  %-18s  %-13s  %s\n" \
+           "----------------------" "----------" "------------------" "-------------" "-----------"
     head -30 /tmp/fe_cves.txt | while IFS= read -r line; do
-        CVE=$(echo    "$line" | awk -F"|" "{print \$2}" | xargs)
-        SEV=$(echo    "$line" | awk -F"|" "{print \$3}" | xargs)
-        PKG=$(echo    "$line" | awk -F"|" "{print \$1}" | xargs)
-        INST=$(echo   "$line" | awk -F"|" "{print \$5}" | xargs)
-        FIXED=$(echo  "$line" | awk -F"|" "{print \$6}" | xargs)
-        printf "  %-20s  %-9s  %-15s  %-11s  %-11s\n" \
+        CVE=$(  echo "$line" | awk -F"|" "{print \$2}" | xargs 2>/dev/null)
+        SEV=$(  echo "$line" | awk -F"|" "{print \$3}" | xargs 2>/dev/null)
+        PKG=$(  echo "$line" | awk -F"|" "{print \$1}" | xargs 2>/dev/null)
+        INST=$( echo "$line" | awk -F"|" "{print \$5}" | xargs 2>/dev/null)
+        FIXED=$(echo "$line" | awk -F"|" "{print \$6}" | xargs 2>/dev/null)
+        printf "  %-22s  %-10s  %-18s  %-13s  %s\n" \
                "$CVE" "$SEV" "$PKG" "$INST" "$FIXED"
     done
-    TOTAL_FE=$(wc -l < /tmp/fe_cves.txt)
+    TOTAL_FE=$(wc -l < /tmp/fe_cves.txt | tr -d " ")
     if [ "$TOTAL_FE" -gt 30 ]; then
-        echo "  ... ($((TOTAL_FE - 30)) more CVEs hidden - run trivy locally to see all)"
+        echo "  ... ($((TOTAL_FE - 30)) more entries -- run trivy locally for full report)"
     fi
 else
     echo ""
-    echo "  >> No HIGH or CRITICAL vulnerabilities found in frontend image."
+    echo "  >> Clean: No HIGH/CRITICAL vulnerabilities found."
 fi
 
 echo ""
-echo "  FRONTEND TOTALS:  CRITICAL = $F_CRIT   HIGH = $F_HIGH"
+echo "  FRONTEND  -->  CRITICAL: ${F_CRIT}   HIGH: ${F_HIGH}"
 echo ""
 
-# =====================================================================
-# FINAL SUMMARY
-# =====================================================================
+# ===========================================================================
+# SUMMARY TABLE
+# ===========================================================================
 TOT_CRIT=$((B_CRIT + F_CRIT))
 TOT_HIGH=$((B_HIGH + F_HIGH))
 TOTAL=$((TOT_CRIT + TOT_HIGH))
 
 echo "$SEP"
-echo "#                    SCAN SUMMARY                                      #"
+echo "#                     FINAL SUMMARY                                   #"
 echo "$SEP"
 echo ""
-printf "  %-12s  %8s  %8s  %8s\n" "IMAGE"     "CRITICAL" "HIGH" "TOTAL"
-printf "  %-12s  %8s  %8s  %8s\n" "------------" "--------" "--------" "--------"
-printf "  %-12s  %8s  %8s  %8s\n" "backend"   "$B_CRIT"  "$B_HIGH"  "$((B_CRIT+B_HIGH))"
-printf "  %-12s  %8s  %8s  %8s\n" "frontend"  "$F_CRIT"  "$F_HIGH"  "$((F_CRIT+F_HIGH))"
-printf "  %-12s  %8s  %8s  %8s\n" "------------" "--------" "--------" "--------"
-printf "  %-12s  %8s  %8s  %8s\n" "TOTAL"     "$TOT_CRIT" "$TOT_HIGH" "$TOTAL"
+printf "  %-14s  %10s  %8s  %8s\n" "IMAGE"    "CRITICAL" "HIGH"  "TOTAL"
+printf "  %-14s  %10s  %8s  %8s\n" "--------------" "----------" "--------" "--------"
+printf "  %-14s  %10s  %8s  %8s\n" "backend"  "$B_CRIT"  "$B_HIGH" "$((B_CRIT + B_HIGH))"
+printf "  %-14s  %10s  %8s  %8s\n" "frontend" "$F_CRIT"  "$F_HIGH" "$((F_CRIT + F_HIGH))"
+printf "  %-14s  %10s  %8s  %8s\n" "--------------" "----------" "--------" "--------"
+printf "  %-14s  %10s  %8s  %8s\n" "TOTAL"    "$TOT_CRIT" "$TOT_HIGH" "$TOTAL"
 echo ""
 
 if [ "$TOT_CRIT" -gt 0 ]; then
-    echo "  STATUS  >>  WARNING: $TOT_CRIT CRITICAL CVE(s) found. Review before shipping."
+    echo "  STATUS >>  WARNING: ${TOT_CRIT} CRITICAL CVE(s) detected. Review before shipping to production."
 else
-    echo "  STATUS  >>  PASSED : Zero CRITICAL vulnerabilities. Safe to push."
+    echo "  STATUS >>  PASSED : No CRITICAL vulnerabilities. Safe to continue."
 fi
 echo ""
 echo "$SEP"
