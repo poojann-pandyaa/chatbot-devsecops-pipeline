@@ -33,7 +33,6 @@ services:
     ports:
       - "5044:5044"
       - "5045:5045"
-      - "5045:5045"
     environment:
       - LS_JAVA_OPTS=-Xms128m -Xmx128m
     networks:
@@ -71,8 +70,7 @@ services:
       - logstash
     command: filebeat -e -strict.perms=false
 
-  # -- Chatbot RAG Backend -----------------------------------------------------
-
+  # -- Redis -------------------------------------------------------------------
   redis:
     image: redis:7-alpine
     container_name: redis
@@ -83,16 +81,34 @@ services:
       - elk
     restart: unless-stopped
 
+  # -- Chatbot RAG Backend -----------------------------------------------------
   chatbot-backend:
-    build: ./backend
+    image: poojannpandyaa/chatbot-backend:latest
     container_name: chatbot-backend
     ports:
-      - "3000:3000"
+      - "8000:8000"
+    environment:
+      - REDIS_HOST=redis
+      - DEFAULT_MODEL=groq
     networks:
       - elk
     depends_on:
-      elasticsearch:
-        condition: service_healthy
+      - redis
+      - elasticsearch
+    restart: unless-stopped
+
+  # -- Chatbot Frontend --------------------------------------------------------
+  chatbot-frontend:
+    image: poojannpandyaa/chatbot-frontend:latest
+    container_name: chatbot-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - RAG_BACKEND_URL=http://chatbot-backend:8000/chat
+    networks:
+      - elk
+    depends_on:
+      - chatbot-backend
     restart: unless-stopped
 
 volumes:
