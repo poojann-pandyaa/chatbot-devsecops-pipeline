@@ -7,7 +7,6 @@
       kind: Namespace
       metadata:
         name: vault
-  ignore_errors: yes
 
 - name: Create chatbot namespace
   kubernetes.core.k8s:
@@ -17,7 +16,6 @@
       kind: Namespace
       metadata:
         name: "{{ k8s_namespace }}"
-  ignore_errors: yes
 
 - name: Deploy HashiCorp Vault in dev mode
   kubernetes.core.k8s:
@@ -55,7 +53,6 @@
                 capabilities:
                   drop: [ALL]
                 allowPrivilegeEscalation: false
-  ignore_errors: yes
 
 - name: Expose Vault as ClusterIP service
   kubernetes.core.k8s:
@@ -73,7 +70,6 @@
         - port: 8200
           targetPort: 8200
         type: ClusterIP
-  ignore_errors: yes
 
 - name: Store API keys in Vault KV
   uri:
@@ -90,7 +86,6 @@
         MISTRAL_API_KEY: "{{ mistral_api_key }}"
         GROK_API_KEY: "{{ grok_api_key }}"
   delegate_to: localhost
-  ignore_errors: yes
 
 - name: Create llm-secrets K8s Secret from Vault values
   kubernetes.core.k8s:
@@ -107,4 +102,3 @@
         OPENAI_API_KEY: "{{ openai_api_key }}"
         MISTRAL_API_KEY: "{{ mistral_api_key }}"
         GROK_API_KEY: "{{ grok_api_key }}"
-  ignore_errors: yes

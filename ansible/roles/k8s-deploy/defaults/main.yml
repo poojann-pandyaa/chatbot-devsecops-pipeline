@@ -1,0 +1,3 @@
+---
+backend_image: "poojannpandyaa/chatbot-backend:latest"
+frontend_image: "poojannpandyaa/chatbot-frontend:latest"

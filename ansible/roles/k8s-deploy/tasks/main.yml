@@ -3,56 +3,60 @@
   kubernetes.core.k8s:
     state: present
     src: "{{ playbook_dir }}/../k8s/namespace.yaml"
-  ignore_errors: yes
+
+- name: Render backend manifest
+  ansible.builtin.template:
+    src: chatbot-deployment.yaml.j2
+    dest: /tmp/chatbot-backend-rendered.yaml
+    mode: "0644"
+
+- name: Render frontend manifest
+  ansible.builtin.template:
+    src: frontend-deployment.yaml.j2
+    dest: /tmp/chatbot-frontend-rendered.yaml
+    mode: "0644"
 
 - name: Apply Redis deployment
   kubernetes.core.k8s:
     state: present
     namespace: "{{ k8s_namespace }}"
     src: "{{ playbook_dir }}/../k8s/redis-deployment.yaml"
-  ignore_errors: yes
 
 - name: Apply backend deployment
   kubernetes.core.k8s:
     state: present
     namespace: "{{ k8s_namespace }}"
-    src: "{{ playbook_dir }}/../k8s/chatbot-deployment.yaml"
-  ignore_errors: yes
+    src: /tmp/chatbot-backend-rendered.yaml
 
 - name: Apply frontend deployment
   kubernetes.core.k8s:
     state: present
     namespace: "{{ k8s_namespace }}"
-    src: "{{ playbook_dir }}/../k8s/frontend-deployment.yaml"
-  ignore_errors: yes
+    src: /tmp/chatbot-frontend-rendered.yaml
 
 - name: Apply backend service
   kubernetes.core.k8s:
     state: present
     namespace: "{{ k8s_namespace }}"
     src: "{{ playbook_dir }}/../k8s/service.yaml"
-  ignore_errors: yes
 
 - name: Apply HPA
   kubernetes.core.k8s:
     state: present
     namespace: "{{ k8s_namespace }}"
     src: "{{ playbook_dir }}/../k8s/hpa.yaml"
-  ignore_errors: yes
 
 - name: Apply ingress
   kubernetes.core.k8s:
     state: present
     namespace: "{{ k8s_namespace }}"
     src: "{{ playbook_dir }}/../k8s/ingress.yaml"
-  ignore_errors: yes
 
 - name: Apply pod disruption budget
   kubernetes.core.k8s:
     state: present
     namespace: "{{ k8s_namespace }}"
     src: "{{ playbook_dir }}/../k8s/pdb.yaml"
-  ignore_errors: yes
 
 - name: Wait for backend rollout
   ansible.builtin.command: >-
@@ -60,8 +64,18 @@
     -n {{ k8s_namespace }} --timeout=120s
   register: rollout_result
   changed_when: false
-  ignore_errors: yes
+
+- name: Wait for frontend rollout
+  ansible.builtin.command: >-
+    kubectl rollout status deployment/frontend
+    -n {{ k8s_namespace }} --timeout=120s
+  register: frontend_rollout_result
+  changed_when: false
 
 - name: Print rollout status
   debug:
     msg: "{{ rollout_result.stdout | default('Rollout status unavailable') }}"
+
+- name: Print frontend rollout status
+  debug:
+    msg: "{{ frontend_rollout_result.stdout | default('Frontend rollout status unavailable') }}"
