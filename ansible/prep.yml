@@ -1,0 +1,7 @@
+---
+- name: System Preparation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  roles:
+    - system-prep

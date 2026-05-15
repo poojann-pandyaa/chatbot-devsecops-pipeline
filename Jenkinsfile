@@ -23,6 +23,12 @@ pipeline {
             }
         }
 
+        stage('System Prep') {
+            steps {
+                sh 'ansible-playbook ansible/prep.yml'
+            }
+        }
+
         stage('Build Backend Image') {
             steps {
                 sh "docker build -t ${BACKEND_IMAGE}:${IMAGE_TAG} ./backend"
@@ -243,6 +249,15 @@ echo ""
         }
         success {
             echo 'Pipeline completed successfully.'
+            sh '''
+                IP=$(minikube ip || echo "localhost")
+                FRONTEND_PORT=$(kubectl get svc frontend-service -n ${NAMESPACE} -o jsonpath="{.spec.ports[0].nodePort}" || echo "3000")
+                echo "========================================================"
+                echo "🚀 DEPLOYMENT SUCCESSFUL! Access your services here:"
+                echo "🌐 Chatbot UI:   http://${IP}:${FRONTEND_PORT}"
+                echo "⚙️  Backend API: kubectl port-forward service/chatbot-service 8000:80 -n ${NAMESPACE}"
+                echo "========================================================"
+            '''
         }
         failure {
             echo 'Pipeline failed. Check logs above.'
