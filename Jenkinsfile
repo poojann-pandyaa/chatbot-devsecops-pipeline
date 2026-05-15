@@ -25,7 +25,7 @@ pipeline {
 
         stage('System Prep') {
             steps {
-                sh 'ansible-playbook ansible/prep.yml'
+                sh 'ansible-playbook ansible/prep.yml --vault-password-file ${ANSIBLE_VAULT_PASS_FILE}'
             }
         }
 
