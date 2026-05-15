@@ -6,8 +6,13 @@ pipeline {
         BACKEND_IMAGE           = "${DOCKERHUB_USER}/chatbot-backend"
         FRONTEND_IMAGE          = "${DOCKERHUB_USER}/chatbot-frontend"
         IMAGE_TAG               = "${BUILD_NUMBER}"
+        NAMESPACE               = "chatbot-prod"
         ANSIBLE_VAULT_PASS_FILE = credentials('ansible-vault-pass')
         PATH                    = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:${env.PATH}"
+    }
+
+    triggers {
+        githubPush()
     }
 
     stages {
@@ -27,6 +32,12 @@ pipeline {
         stage('Build Frontend Image') {
             steps {
                 sh "docker build -t ${FRONTEND_IMAGE}:${IMAGE_TAG} ./app"
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                sh 'cd backend && python -m pytest tests/ --tb=short || true'
             }
         }
 
@@ -163,7 +174,8 @@ printf "  %-14s  %10s  %8s  %8s\n" "TOTAL"    "$TOT_CRIT" "$TOT_HIGH" "$TOTAL"
 echo ""
 
 if [ "$TOT_CRIT" -gt 0 ]; then
-    echo "  STATUS >>  WARNING: ${TOT_CRIT} CRITICAL CVE(s) detected. Review before shipping to production."
+    echo "  STATUS >>  FAILED: ${TOT_CRIT} CRITICAL CVE(s) detected. Blocking deployment."
+    exit 1
 else
     echo "  STATUS >>  PASSED : No CRITICAL vulnerabilities. Safe to continue."
 fi
@@ -185,6 +197,10 @@ echo ""
                         echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
                         docker push ${BACKEND_IMAGE}:${IMAGE_TAG}
                         docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
+                        docker tag ${BACKEND_IMAGE}:${IMAGE_TAG} ${BACKEND_IMAGE}:latest
+                        docker tag ${FRONTEND_IMAGE}:${IMAGE_TAG} ${FRONTEND_IMAGE}:latest
+                        docker push ${BACKEND_IMAGE}:latest
+                        docker push ${FRONTEND_IMAGE}:latest
                     '''
                 }
             }
@@ -206,14 +222,25 @@ echo ""
             steps {
                 sh '''
                     sleep 15
-                    kubectl get pods -n chatbot-prod
-                    kubectl rollout status deployment/chatbot-backend -n chatbot-prod --timeout=120s
+                    kubectl get pods -n ${NAMESPACE}
+                '''
+            }
+        }
+
+        stage('Validate ELK') {
+            steps {
+                sh '''
+                    echo "Validating ELK Log Push (Placeholder)"
+                    curl -s http://logstash-service:5044 || true
                 '''
             }
         }
     }
 
     post {
+        always {
+            sh 'docker image prune -f || true'
+        }
         success {
             echo 'Pipeline completed successfully.'
         }

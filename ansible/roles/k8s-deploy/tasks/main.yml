@@ -1,9 +1,4 @@
 ---
-- name: Apply namespace
-  kubernetes.core.k8s:
-    state: present
-    src: "{{ playbook_dir }}/../k8s/namespace.yaml"
-
 - name: Render backend manifest
   ansible.builtin.template:
     src: chatbot-deployment.yaml.j2
@@ -33,12 +28,6 @@
     state: present
     namespace: "{{ k8s_namespace }}"
     src: /tmp/chatbot-frontend-rendered.yaml
-
-- name: Apply backend service
-  kubernetes.core.k8s:
-    state: present
-    namespace: "{{ k8s_namespace }}"
-    src: "{{ playbook_dir }}/../k8s/service.yaml"
 
 - name: Apply HPA
   kubernetes.core.k8s:
