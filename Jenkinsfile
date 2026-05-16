@@ -256,6 +256,8 @@ echo ""
                 echo "🚀 DEPLOYMENT SUCCESSFUL! Access your services here:"
                 echo "🌐 Chatbot UI:   http://${IP}:${FRONTEND_PORT}"
                 echo "⚙️  Backend API: kubectl port-forward service/chatbot-service 8000:80 -n ${NAMESPACE}"
+                echo "📊 Kibana (Logs): http://localhost:5601"
+                echo "📈 Grafana (Metrics): http://localhost:3001"
                 echo "========================================================"
             '''
         }
