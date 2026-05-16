@@ -43,7 +43,17 @@ pipeline {
 
         stage('Run Tests') {
             steps {
-                sh 'cd backend && python -m pytest tests/ --tb=short || true'
+                sh '''#!/bin/bash
+                    set +e
+                    cd backend
+                    python3 -m venv .venv
+                    source .venv/bin/activate
+                    pip install -q -r requirements.txt
+                    python -m pytest tests/ -v --tb=short
+                    TEST_EXIT=$?
+                    deactivate
+                    exit $TEST_EXIT
+                '''
             }
         }
 
@@ -249,20 +259,44 @@ echo ""
         }
         success {
             echo 'Pipeline completed successfully.'
-            sh '''
-                IP=$(minikube ip || echo "localhost")
-                FRONTEND_PORT=$(kubectl get svc frontend-service -n ${NAMESPACE} -o jsonpath="{.spec.ports[0].nodePort}" || echo "3000")
+            sh '''#!/bin/bash
+                set +e
+
+                # ── 1. Start Observability Stack (ELK + Grafana) ──────────
+                echo "▶ Starting observability stack via docker-compose..."
+                cd ${WORKSPACE}
+                docker-compose up -d elasticsearch kibana logstash prometheus grafana redis-exporter 2>/dev/null || true
+                sleep 5
+
+                # ── 2. Set up port-forwards for K8s services ──────────────
+                echo "▶ Setting up port-forwards for K8s services..."
+
+                # Kill any stale port-forwards
+                pkill -f "kubectl port-forward.*chatbot-service" 2>/dev/null || true
+                pkill -f "kubectl port-forward.*frontend-service" 2>/dev/null || true
+                sleep 1
+
+                # Start fresh port-forwards (background, survive pipeline exit)
+                nohup kubectl port-forward service/frontend-service 3000:80 -n ${NAMESPACE} > /tmp/pf-frontend.log 2>&1 &
+                nohup kubectl port-forward service/chatbot-service 8000:80 -n ${NAMESPACE} > /tmp/pf-backend.log 2>&1 &
+                sleep 3
+
+                # ── 3. Verify and Print URLs ──────────────────────────────
+                echo ""
                 echo "========================================================"
-                echo "🚀 DEPLOYMENT SUCCESSFUL! Access your services using these commands:"
+                echo "🚀 DEPLOYMENT SUCCESSFUL!"
+                echo "========================================================"
                 echo ""
-                echo "🌐 Chatbot UI (Run this in your terminal):"
-                echo "   minikube service frontend-service -n ${NAMESPACE}"
+                echo "  🌐 Chatbot UI:        http://localhost:3000"
+                echo "  ⚙️  Backend API:       http://localhost:8000/docs"
+                echo "  📊 Kibana (Logs):      http://localhost:5601"
+                echo "  📈 Grafana (Metrics):  http://localhost:3001"
+                echo "  🔍 Prometheus:         http://localhost:9090"
+                echo "  🔐 Vault UI:           http://localhost:8200"
                 echo ""
-                echo "⚙️  Backend API (Run this in a separate terminal):"
-                echo "   kubectl port-forward service/chatbot-service 8000:80 -n ${NAMESPACE}"
-                echo ""
-                echo "📊 Kibana (Logs):     http://localhost:5601 (requires docker-compose up -d)"
-                echo "📈 Grafana (Metrics): http://localhost:3001 (requires docker-compose up -d)"
+                echo "========================================================"
+                echo "  All port-forwards are running in the background."
+                echo "  To stop them:  pkill -f 'kubectl port-forward'"
                 echo "========================================================"
             '''
         }

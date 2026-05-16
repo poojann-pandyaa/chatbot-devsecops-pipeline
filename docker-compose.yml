@@ -18,6 +18,7 @@ services:
       - "9200:9200"
     networks:
       - elk
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
       interval: 20s
@@ -35,6 +36,7 @@ services:
       - "5601:5601"
     networks:
       - elk
+    restart: unless-stopped
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -52,6 +54,7 @@ services:
       - LS_JAVA_OPTS=-Xms128m -Xmx128m
     networks:
       - elk
+    restart: unless-stopped
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -67,6 +70,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - elk
+    restart: unless-stopped
     depends_on:
       - logstash
     command: filebeat -e -strict.perms=false
@@ -92,6 +96,7 @@ services:
       - "9121:9121"
     networks:
       - elk
+    restart: unless-stopped
     depends_on:
       - redis
 
@@ -168,6 +173,7 @@ services:
       - "9090:9090"
     networks:
       - elk
+    restart: unless-stopped
     depends_on:
       - chatbot-backend
       - chatbot-frontend
@@ -188,6 +194,7 @@ services:
       - "3001:3000"
     networks:
       - elk
+    restart: unless-stopped
     depends_on:
       - prometheus
 
