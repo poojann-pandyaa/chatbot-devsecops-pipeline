@@ -253,11 +253,16 @@ echo ""
                 IP=$(minikube ip || echo "localhost")
                 FRONTEND_PORT=$(kubectl get svc frontend-service -n ${NAMESPACE} -o jsonpath="{.spec.ports[0].nodePort}" || echo "3000")
                 echo "========================================================"
-                echo "🚀 DEPLOYMENT SUCCESSFUL! Access your services here:"
-                echo "🌐 Chatbot UI:   http://${IP}:${FRONTEND_PORT}"
-                echo "⚙️  Backend API: kubectl port-forward service/chatbot-service 8000:80 -n ${NAMESPACE}"
-                echo "📊 Kibana (Logs): http://localhost:5601"
-                echo "📈 Grafana (Metrics): http://localhost:3001"
+                echo "🚀 DEPLOYMENT SUCCESSFUL! Access your services using these commands:"
+                echo ""
+                echo "🌐 Chatbot UI (Run this in your terminal):"
+                echo "   minikube service frontend-service -n ${NAMESPACE}"
+                echo ""
+                echo "⚙️  Backend API (Run this in a separate terminal):"
+                echo "   kubectl port-forward service/chatbot-service 8000:80 -n ${NAMESPACE}"
+                echo ""
+                echo "📊 Kibana (Logs):     http://localhost:5601 (requires docker-compose up -d)"
+                echo "📈 Grafana (Metrics): http://localhost:3001 (requires docker-compose up -d)"
                 echo "========================================================"
             '''
         }
