@@ -77,11 +77,16 @@
   changed_when: false
 
 - name: Store API keys in Vault via kubectl exec
-  ansible.builtin.command: >-\
-    kubectl exec -n vault deployment/vault -- sh -c "
-      export VAULT_TOKEN={{ vault_root_token }} &&
-      export VAULT_ADDR=http://127.0.0.1:8200 &&
-      vault kv put secret/chatbot GROQ_API_KEY={{ groq_api_key }} OPENAI_API_KEY={{ openai_api_key }} MISTRAL_API_KEY={{ mistral_api_key }} GROK_API_KEY={{ grok_api_key }}"
+  ansible.builtin.command: >-
+    kubectl exec -n vault deployment/vault -- sh -c
+    "export VAULT_TOKEN={{ vault_root_token }} &&
+    export VAULT_ADDR=http://127.0.0.1:8200 &&
+    vault kv put secret/chatbot
+    GROQ_API_KEY={{ groq_api_key }}
+    OPENAI_API_KEY={{ openai_api_key }}
+    MISTRAL_API_KEY={{ mistral_api_key }}
+    GROK_API_KEY={{ grok_api_key }}"
+  changed_when: true
 
 - name: Create llm-secrets K8s Secret from Vault values
   kubernetes.core.k8s:
