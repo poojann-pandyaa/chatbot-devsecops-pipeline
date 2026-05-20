@@ -38,7 +38,7 @@
           spec:
             containers:
             - name: vault
-              image: hashicorp/vault:latest
+              image: hashicorp/vault:1.17.6
               args: ["server", "-dev", "-dev-root-token-id=root"]
               ports:
               - containerPort: 8200
@@ -47,11 +47,10 @@
                 value: "{{ vault_root_token }}"
               - name: VAULT_DEV_LISTEN_ADDRESS
                 value: "0.0.0.0:8200"
-              - name: SKIP_SETCAP
-                value: "true"
               securityContext:
                 capabilities:
-                  drop: [ALL]
+                  add: ["IPC_LOCK"]
+                  drop: ["ALL"]
                 allowPrivilegeEscalation: false
 
 - name: Expose Vault as ClusterIP service
@@ -73,7 +72,7 @@
 
 - name: Wait for Vault pod to be ready
   ansible.builtin.command: >-
-    kubectl wait --for=condition=ready pod -l app=vault -n vault --timeout=120s
+    kubectl wait --for=condition=ready pod -l app=vault -n vault --timeout=180s
   changed_when: false
 
 - name: Store API keys in Vault via kubectl exec
