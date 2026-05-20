@@ -1,22 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: frontend
+  name: chatbot-frontend
   namespace: {{ k8s_namespace }}
   labels:
-    app: frontend
+    app: chatbot-frontend
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: frontend
+      app: chatbot-frontend
   template:
     metadata:
       labels:
-        app: frontend
+        app: chatbot-frontend
     spec:
       containers:
-      - name: frontend
+      - name: chatbot-frontend
         image: {{ frontend_image }}
         imagePullPolicy: Always
         ports:
@@ -54,7 +54,7 @@ metadata:
   namespace: {{ k8s_namespace }}
 spec:
   selector:
-    app: frontend
+    app: chatbot-frontend
   ports:
   - port: 80
     targetPort: 3000
