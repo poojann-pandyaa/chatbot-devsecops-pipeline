@@ -56,7 +56,7 @@
 
 - name: Wait for frontend rollout
   ansible.builtin.command: >-
-    kubectl rollout status deployment/frontend
+    kubectl rollout status deployment/chatbot-frontend
     -n {{ k8s_namespace }} --timeout=120s
   register: frontend_rollout_result
   changed_when: false
