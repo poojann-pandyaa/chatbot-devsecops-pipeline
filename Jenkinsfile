@@ -224,7 +224,13 @@ echo "$SEP"
                 pkill -f "kubectl port-forward.*chatbot-service"  2>/dev/null || true
                 pkill -f "kubectl port-forward.*frontend-service" 2>/dev/null || true
                 pkill -f "kubectl port-forward.*vault"            2>/dev/null || true
-                sleep 1
+                sleep 2
+
+                # Wait for Vault pod to be fully ready before port-forwarding
+                echo "Waiting for Vault pod to be ready..."
+                kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=vault -n vault --timeout=60s 2>/dev/null || \
+                kubectl wait --for=condition=ready pod -l app=vault -n vault --timeout=60s 2>/dev/null || \
+                sleep 15
 
                 # Start port-forwards
                 nohup kubectl port-forward service/frontend-service 3000:80   -n ${NAMESPACE} > /tmp/pf-frontend.log 2>&1 &
