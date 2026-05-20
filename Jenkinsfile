@@ -220,22 +220,14 @@ echo "$SEP"
                 docker-compose up -d elasticsearch kibana logstash prometheus grafana redis-exporter 2>/dev/null || true
                 sleep 5
 
-                # Kill stale port-forwards
+                # Kill stale port-forwards for app services
                 pkill -f "kubectl port-forward.*chatbot-service"  2>/dev/null || true
                 pkill -f "kubectl port-forward.*frontend-service" 2>/dev/null || true
-                pkill -f "kubectl port-forward.*vault"            2>/dev/null || true
                 sleep 2
 
-                # Wait for Vault pod to be fully ready before port-forwarding
-                echo "Waiting for Vault pod to be ready..."
-                kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=vault -n vault --timeout=60s 2>/dev/null || \
-                kubectl wait --for=condition=ready pod -l app=vault -n vault --timeout=60s 2>/dev/null || \
-                sleep 15
-
-                # Start port-forwards
-                nohup kubectl port-forward service/frontend-service 3000:80   -n ${NAMESPACE} > /tmp/pf-frontend.log 2>&1 &
-                nohup kubectl port-forward service/chatbot-service  8000:80   -n ${NAMESPACE} > /tmp/pf-backend.log  2>&1 &
-                nohup kubectl port-forward service/vault            8200:8200 -n vault        > /tmp/pf-vault.log    2>&1 &
+                # Start port-forwards for app services
+                nohup kubectl port-forward service/frontend-service 3000:80 -n ${NAMESPACE} > /tmp/pf-frontend.log 2>&1 &
+                nohup kubectl port-forward service/chatbot-service  8000:80 -n ${NAMESPACE} > /tmp/pf-backend.log  2>&1 &
                 sleep 3
 
                 echo ""
@@ -247,9 +239,23 @@ echo "$SEP"
                 echo "  Kibana       :  http://localhost:5601"
                 echo "  Grafana      :  http://localhost:3001"
                 echo "  Prometheus   :  http://localhost:9090"
-                echo "  Vault UI     :  http://localhost:8200"
                 echo "========================================================"
-                echo "  To stop port-forwards: pkill -f 'kubectl port-forward'"
+                echo ""
+                echo "  --------------------------------------------------------"
+                echo "  VAULT ACCESS  (run manually in your terminal)"
+                echo "  --------------------------------------------------------"
+                echo "  1. Start port-forward:"
+                echo "       kubectl port-forward service/vault 8200:8200 -n vault"
+                echo ""
+                echo "  2. Open in browser:  http://localhost:8200"
+                echo ""
+                echo "  3. Login with token: root"
+                echo "  --------------------------------------------------------"
+                echo "  NOTE: Vault uses kubectl port-forward by design."
+                echo "  Exposing Vault via NodePort/LoadBalancer is not recommended."
+                echo "  --------------------------------------------------------"
+                echo ""
+                echo "  To stop app port-forwards: pkill -f 'kubectl port-forward'"
                 echo "========================================================"
             '''
         }
