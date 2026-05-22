@@ -214,20 +214,26 @@ echo "$SEP"
             sh '''#!/bin/bash
                 set +e
 
-                # Start observability stack
+                # Start observability stack (ELK, Prometheus, Grafana only)
                 echo "Starting observability stack..."
                 cd ${WORKSPACE}
                 docker-compose up -d elasticsearch kibana logstash prometheus grafana redis-exporter 2>/dev/null || true
                 sleep 5
 
-                # Kill stale port-forwards for app services
+                # Stop Docker Compose app containers to avoid port conflicts with K8s
+                # The K8s versions are the production services; Docker copies must not compete
+                docker stop chatbot-frontend chatbot-backend vault 2>/dev/null || true
+
+                # Kill stale port-forwards
                 pkill -f "kubectl port-forward.*chatbot-service"  2>/dev/null || true
                 pkill -f "kubectl port-forward.*frontend-service" 2>/dev/null || true
+                pkill -f "kubectl port-forward.*vault"            2>/dev/null || true
                 sleep 2
 
-                # Start port-forwards for app services
-                nohup kubectl port-forward service/frontend-service 3000:80 -n ${NAMESPACE} > /tmp/pf-frontend.log 2>&1 &
-                nohup kubectl port-forward service/chatbot-service  8000:80 -n ${NAMESPACE} > /tmp/pf-backend.log  2>&1 &
+                # Start port-forwards (K8s services → localhost)
+                nohup kubectl port-forward service/frontend-service 3000:80   -n ${NAMESPACE} > /tmp/pf-frontend.log 2>&1 &
+                nohup kubectl port-forward service/chatbot-service  8000:80   -n ${NAMESPACE} > /tmp/pf-backend.log  2>&1 &
+                nohup kubectl port-forward service/vault            8200:8200 -n vault        > /tmp/pf-vault.log    2>&1 &
                 sleep 3
 
                 echo ""

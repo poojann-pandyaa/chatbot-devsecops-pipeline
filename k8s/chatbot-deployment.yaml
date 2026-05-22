@@ -25,6 +25,10 @@ spec:
           value: "redis-service"
         - name: DEFAULT_MODEL
           value: "groq"
+        - name: VAULT_ADDR
+          value: "http://vault.vault.svc.cluster.local:8200"
+        - name: VAULT_TOKEN
+          value: "root"
         - name: GROQ_API_KEY
           valueFrom:
             secretKeyRef:
