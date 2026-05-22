@@ -1,19 +1,14 @@
-import { OpenAIModelID, OpenAIModels } from '@/types/openai';
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
-export const config = {
-  runtime: 'edge',
-};
+const BACKEND_URL = process.env.BACKEND_URL || 'http://chatbot-service';
 
-// Return a single dummy RAG model so the frontend never calls Groq/OpenAI
-const handler = async (req: NextRequest): Promise<NextResponse> => {
-  const ragModel = {
-    ...OpenAIModels[OpenAIModelID.GPT_3_5],
-    id: OpenAIModelID.GPT_3_5,
-    name: 'Reasoning-RAG (Gemma-2)',
-  };
-
-  return NextResponse.json([ragModel]);
-};
-
-export default handler;
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    const response = await fetch(`${BACKEND_URL}/models`);
+    const data = await response.json();
+    return res.status(response.status).json(data);
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message || 'Internal server error' });
+  }
+}

@@ -22,3 +22,9 @@ merged-chatbot-gemma2/
 __pycache__/
 *.pyc
 jenkins-cli.jar
+
+# Python virtual environments
+.venv/
+
+# Test caches
+**/.pytest_cache/
