@@ -70,7 +70,7 @@ class TestModels:
 
     def test_models_contains_known_providers(self):
         models = client.get("/models").json()["available"]
-        for expected in ["grok", "groq", "openai", "mistral"]:
+        for expected in ["grok", "llama", "openai", "mistral"]:
             assert expected in models, f"Missing provider: {expected}"
 
 
@@ -127,13 +127,13 @@ class TestKeyManagement:
         """Saving a key for a valid provider should succeed."""
         response = client.post("/keys", json={
             "user_id": "test-user",
-            "provider": "groq",
+            "provider": "llama",
             "api_key": "sk-test-key-1234567890"
         })
         assert response.status_code == 200
         data = response.json()
         assert data["saved"] is True
-        assert data["provider"] == "groq"
+        assert data["provider"] == "llama"
         assert "masked_key" in data
 
     def test_get_keys_returns_structure(self):
@@ -148,7 +148,7 @@ class TestKeyManagement:
     @patch("main.vault_read", return_value={})
     def test_delete_key(self, mock_read, mock_store):
         """Deleting a key should return deleted=True."""
-        response = client.delete("/keys/test-user/groq")
+        response = client.delete("/keys/test-user/llama")
         assert response.status_code == 200
         assert response.json()["deleted"] is True
 

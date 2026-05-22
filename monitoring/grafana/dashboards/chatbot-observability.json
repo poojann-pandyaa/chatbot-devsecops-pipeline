@@ -228,7 +228,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (status) (rate(backend_chat_requests_total[5m]))",
+          "expr": "sum by (status) (backend_chat_requests_total)",
           "refId": "A"
         }
       ],

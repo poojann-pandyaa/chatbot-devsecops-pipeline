@@ -2,4 +2,4 @@
 k8s_namespace: chatbot-prod
 vault_addr: "http://vault.vault.svc.cluster.local:8200"
 vault_root_token: "root"
-default_model: "groq"
+default_model: "llama"

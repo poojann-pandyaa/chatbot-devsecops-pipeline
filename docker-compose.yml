@@ -131,7 +131,7 @@ services:
       - "8000:8000"
     environment:
       - REDIS_HOST=redis
-      - DEFAULT_MODEL=groq
+      - DEFAULT_MODEL=llama
       - VAULT_ADDR=http://vault:8200
       - VAULT_TOKEN=root
     networks:

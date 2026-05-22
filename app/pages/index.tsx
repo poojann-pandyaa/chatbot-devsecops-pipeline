@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 const MODELS = [
   { id: 'grok', label: 'Grok 3', color: 'text-green-400' },
-  { id: 'groq', label: 'Llama3.3-70B', color: 'text-orange-400' },
+  { id: 'llama', label: 'Llama3.3-70B', color: 'text-orange-400' },
   { id: 'openai', label: 'GPT-4o', color: 'text-blue-400' },
   { id: 'mistral', label: 'Mistral Large', color: 'text-purple-400' },
 ];
