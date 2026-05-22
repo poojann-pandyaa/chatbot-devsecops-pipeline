@@ -233,12 +233,27 @@ echo "$SEP"
                 sleep 2
 
                 # Start port-forwards (K8s services → localhost)
+                # Prevent Jenkins ProcessTreeKiller from terminating our background port-forwards
+                export JENKINS_NODE_COOKIE=dontKillMe
+                export BUILD_ID=dontKillMe
                 nohup kubectl port-forward service/frontend-service   3000:80   -n ${NAMESPACE} > /tmp/pf-frontend.log 2>&1 &
                 nohup kubectl port-forward service/chatbot-service    8000:80   -n ${NAMESPACE} > /tmp/pf-backend.log  2>&1 &
                 nohup kubectl port-forward service/vault              8200:8200 -n vault        > /tmp/pf-vault.log    2>&1 &
                 nohup kubectl port-forward service/prometheus-service 9090:9090 -n monitoring   > /tmp/pf-prometheus.log 2>&1 &
                 nohup kubectl port-forward service/grafana-service    3001:3000 -n monitoring   > /tmp/pf-grafana.log    2>&1 &
                 sleep 3
+
+                # Verify that port-forwards are active and listening
+                echo "Verifying localhost service port-forwards..."
+                echo "--------------------------------------------------------"
+                for port in 3000 8000 8200 9090 3001 5601; do
+                    if lsof -i :$port >/dev/null 2>&1 || nc -z localhost $port >/dev/null 2>&1; then
+                        echo "  Port $port: ACTIVE & LISTENING"
+                    else
+                        echo "  Port $port: NOT LISTENING (Possible conflict or startup latency)"
+                    fi
+                done
+                echo "--------------------------------------------------------"
 
                 # Dynamically retrieve Minikube IP and K8s NodePorts
                 MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "127.0.0.1")
