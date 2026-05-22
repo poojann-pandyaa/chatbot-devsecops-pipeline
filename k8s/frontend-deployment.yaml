@@ -1,22 +1,26 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: frontend
+  name: chatbot-frontend
   namespace: chatbot-prod
   labels:
-    app: frontend
+    app: chatbot-frontend
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: frontend
+      app: chatbot-frontend
   template:
     metadata:
       labels:
-        app: frontend
+        app: chatbot-frontend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/api/metrics"
+        prometheus.io/port: "3000"
     spec:
       containers:
-      - name: frontend
+      - name: chatbot-frontend
         image: poojannpandyaa/chatbot-frontend:latest
         imagePullPolicy: Always
         ports:
@@ -54,7 +58,7 @@ metadata:
   namespace: chatbot-prod
 spec:
   selector:
-    app: frontend
+    app: chatbot-frontend
   ports:
   - port: 80
     targetPort: 3000
