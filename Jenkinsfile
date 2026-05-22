@@ -240,32 +240,48 @@ echo "$SEP"
                 nohup kubectl port-forward service/grafana-service    3001:3000 -n monitoring   > /tmp/pf-grafana.log    2>&1 &
                 sleep 3
 
+                # Dynamically retrieve Minikube IP and K8s NodePorts
+                MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "127.0.0.1")
+                FRONTEND_NODEPORT=$(kubectl get svc frontend-service -n ${NAMESPACE} -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "31774")
+                GRAFANA_NODEPORT=$(kubectl get svc grafana-service -n monitoring -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "30001")
+                PROMETHEUS_NODEPORT=$(kubectl get svc prometheus-service -n monitoring -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "30090")
+
                 echo ""
                 echo "========================================================"
                 echo "  DEPLOYMENT SUCCESSFUL  --  Build #${BUILD_NUMBER}"
                 echo "========================================================"
+                echo "  ACCESS METHOD 1: Localhost Port-Forwards (Mac/Local)"
+                echo "  --------------------------------------------------------"
                 echo "  Chatbot UI   :  http://localhost:3000"
                 echo "  Backend API  :  http://localhost:8000/docs"
                 echo "  Kibana       :  http://localhost:5601"
                 echo "  Grafana      :  http://localhost:3001"
                 echo "  Prometheus   :  http://localhost:9090"
-                echo "========================================================"
+                echo "  --------------------------------------------------------"
+                echo "  ACCESS METHOD 2: Direct NodePort URLs (Minikube IP)"
+                echo "  --------------------------------------------------------"
+                echo "  Chatbot UI   :  http://${MINIKUBE_IP}:${FRONTEND_NODEPORT}"
+                echo "  Grafana      :  http://${MINIKUBE_IP}:${GRAFANA_NODEPORT}"
+                echo "  Prometheus   :  http://${MINIKUBE_IP}:${PROMETHEUS_NODEPORT}"
+                echo "  --------------------------------------------------------"
+                echo "  PODS HOSTING & NETWORK INFORMATION"
+                echo "  --------------------------------------------------------"
+                echo "  [Application Space (Namespace: ${NAMESPACE})]"
+                kubectl get pods -n ${NAMESPACE} -o custom-columns=POD:.metadata.name,IP:.status.podIP,STATUS:.status.phase,NODE:.spec.nodeName
+                echo ""
+                echo "  [Observability Space (Namespace: monitoring)]"
+                kubectl get pods -n monitoring -o custom-columns=POD:.metadata.name,IP:.status.podIP,STATUS:.status.phase,NODE:.spec.nodeName
                 echo ""
                 echo "  --------------------------------------------------------"
-                echo "  VAULT ACCESS  (run manually in your terminal)"
+                echo "  VAULT ACCESS (Namespace: vault)"
                 echo "  --------------------------------------------------------"
                 echo "  1. Start port-forward:"
                 echo "       kubectl port-forward service/vault 8200:8200 -n vault"
-                echo ""
                 echo "  2. Open in browser:  http://localhost:8200"
-                echo ""
                 echo "  3. Login with token: root"
                 echo "  --------------------------------------------------------"
                 echo "  NOTE: Vault uses kubectl port-forward by design."
-                echo "  Exposing Vault via NodePort/LoadBalancer is not recommended."
-                echo "  --------------------------------------------------------"
-                echo ""
-                echo "  To stop app port-forwards: pkill -f 'kubectl port-forward'"
+                echo "  To stop localhost port-forwards: pkill -f 'kubectl port-forward'"
                 echo "========================================================"
             '''
         }
