@@ -53,7 +53,7 @@
     \vspace{1.2cm}
     {\large Project Repository: \texttt{poojann-pandyaa/chatbot-devsecops-pipeline}\par}
     \vspace{0.8cm}
-    {\large Technology Stack: Next.js, Docker, Jenkins, Ansible, Kubernetes, Terraform, Vault, SonarQube, Trivy\par}
+    {\large Technology Stack: Next.js, Docker, Jenkins, Ansible, Kubernetes, Vault, SonarQube, Trivy\par}
     \vfill
     \begin{tabular}{rl}
         Student Name: & \textbf{Poojan Pandya} \\
@@ -78,8 +78,8 @@ deployment, and production-readiness controls.
 
 The final system uses Jenkins for CI/CD orchestration, Docker for packaging,
 SonarQube and Trivy for quality and security checks, Ansible for deployment
-automation, Terraform for EKS infrastructure, Vault-backed Kubernetes secrets for
-API key handling, and Kubernetes manifests for scalable production deployment.
+automation, Vault-backed Kubernetes secrets for API key handling, and Kubernetes
+manifests for scalable production deployment.
 The Kubernetes layer includes namespace isolation, rolling updates, liveness and
 readiness probes, Ingress with TLS, a Pod Disruption Budget, and Horizontal Pod
 Autoscaling using resource and application-level metrics.
@@ -108,21 +108,20 @@ The major objectives of this project are:
     \item Integrate filesystem and container image vulnerability scanning using Trivy.
     \item Use Ansible as the deployment driver for Kubernetes resources.
     \item Store sensitive API keys through Kubernetes secrets prepared by the Vault configuration role.
-    \item Provision cloud Kubernetes infrastructure using Terraform for AWS EKS.
+    \item Deploy the application to a local Kubernetes cluster using Minikube.
     \item Deploy the application with production-grade Kubernetes controls.
     \item Demonstrate autoscaling using Kubernetes HPA and application metrics.
 \end{itemize}
 
 \section{System Overview}
 
-The system contains five main layers:
+The system contains four main layers:
 
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Application Layer:} A Next.js chatbot UI and API service.
     \item \textbf{Container Layer:} A multi-stage Dockerfile builds and runs the app.
     \item \textbf{CI/CD Layer:} Jenkins automates dependency installation, analysis, scanning, build, push, and deployment.
     \item \textbf{Deployment Automation Layer:} Ansible applies Kubernetes manifests and verifies rollout status.
-    \item \textbf{Infrastructure Layer:} Terraform defines AWS EKS cluster resources.
 \end{enumerate}
 
 \subsection{High-Level Architecture}
@@ -140,7 +139,6 @@ Trivy & Scans source files and Docker images for vulnerabilities. \\
 Ansible & Applies Kubernetes resources and waits for deployment rollout completion. \\
 Kubernetes & Runs the chatbot workload with replicas, probes, service, Ingress, PDB, and HPA. \\
 Vault Role & Prepares secret flow and creates the Kubernetes secret used by the chatbot pod. \\
-Terraform & Defines AWS EKS cluster, node group, IAM, VPC, and provider configuration. \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -272,24 +270,6 @@ kubectl create secret generic chatbot-secrets \
 
 The Ansible Vault configuration role also creates the Kubernetes secret in the
 target namespace using the provided \texttt{openai\_api\_key} variable.
-
-\section{Infrastructure as Code}
-
-The \texttt{EKS-TF} directory contains Terraform files for AWS EKS
-infrastructure. The infrastructure code includes:
-
-\begin{itemize}[leftmargin=*]
-    \item AWS provider configuration.
-    \item EKS cluster definition.
-    \item EKS node group definition.
-    \item IAM roles and policies.
-    \item VPC and subnet-related configuration.
-    \item Terraform backend and variables.
-\end{itemize}
-
-Using Terraform makes the infrastructure reproducible. Instead of manually
-creating Kubernetes clusters, the EKS environment can be declared, reviewed,
-versioned, and recreated.
 
 \section{Ansible Deployment Automation}
 
@@ -483,7 +463,6 @@ The project demonstrates a full DevSecOps workflow:
     \item Secrets are separated from source code and injected at runtime.
     \item Kubernetes deployment uses production controls rather than a minimal demo manifest.
     \item Ansible performs deployment automation and rollout verification.
-    \item Terraform provides infrastructure-as-code support for AWS EKS.
     \item Health and metrics endpoints support reliability and observability.
 \end{itemize}
 
@@ -506,7 +485,7 @@ The project can be improved further with:
 This SPE project successfully converts a chatbot web application into a
 DevSecOps-ready system. The result includes CI/CD automation, image scanning,
 code quality analysis, containerization, Kubernetes deployment, secret handling,
-infrastructure-as-code, health checks, metrics, and autoscaling configuration.
+health checks, metrics, and autoscaling configuration.
 
 The most important engineering improvement is the shift from a basic deployment
 to a traceable and verifiable release process. Jenkins builds a commit-tagged
