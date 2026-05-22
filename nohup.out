@@ -1,0 +1,10 @@
+E0520 17:35:27.319214   53383 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: invalid character '<' looking for beginning of value"
+E0520 17:35:27.326668   53383 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: invalid character '<' looking for beginning of value"
+E0520 17:35:27.333612   53383 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: invalid character '<' looking for beginning of value"
+E0520 17:35:27.339286   53383 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: invalid character '<' looking for beginning of value"
+error: invalid character '<' looking for beginning of value
+E0520 17:35:44.626570   53397 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: invalid character '<' looking for beginning of value"
+E0520 17:35:44.640188   53397 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: invalid character '<' looking for beginning of value"
+E0520 17:35:44.654489   53397 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: invalid character '<' looking for beginning of value"
+E0520 17:35:44.666084   53397 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: invalid character '<' looking for beginning of value"
+error: invalid character '<' looking for beginning of value
