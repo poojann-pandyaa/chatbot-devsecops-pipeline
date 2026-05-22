@@ -10,12 +10,12 @@ scrape_configs:
   - job_name: "frontend-nextjs"
     metrics_path: /api/metrics
     static_configs:
-      - targets: ["chatbot-frontend:3000", "host.docker.internal:3000"]
+      - targets: ["host.docker.internal:3000"]
 
   - job_name: "backend-fastapi"
     metrics_path: /metrics
     static_configs:
-      - targets: ["chatbot-backend:8000", "host.docker.internal:8000"]
+      - targets: ["host.docker.internal:8000"]
 
   - job_name: "redis-exporter"
     static_configs:
