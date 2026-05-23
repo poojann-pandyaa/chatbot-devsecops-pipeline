@@ -190,10 +190,12 @@ echo "$SEP"
                         -i ansible/inventory/hosts.ini
                 '''
                 sh '''
-                    # Apply Ingress resources (not managed by Ansible role)
+                    # Apply Ingress resources and updated Prometheus (not managed by Ansible role)
                     kubectl apply -f k8s/ingress.yaml
                     kubectl apply -f k8s/monitoring-ingress.yaml
-                    echo "Ingress resources applied."
+                    kubectl apply -f k8s/prometheus/statefulset.yaml
+                    kubectl apply -f k8s/grafana/deployment.yaml
+                    echo "Ingress + Prometheus + Grafana resources applied."
                     kubectl get ingress -A
                 '''
             }
@@ -238,13 +240,15 @@ echo "$SEP"
                 sleep 2
 
                 # ── Ensure minikube tunnel is running (Ingress → 127.0.0.1) ──
-                # tunnel maps the Ingress LoadBalancer IP to 127.0.0.1 on Mac
-                pkill -f "minikube tunnel" 2>/dev/null || true
-                sleep 1
-                export JENKINS_NODE_COOKIE=dontKillMe
-                export BUILD_ID=dontKillMe
-                nohup minikube tunnel --cleanup=false > /tmp/minikube-tunnel.log 2>&1 &
-                sleep 5
+                # NOTE: minikube tunnel needs sudo for port 80 and must run in
+                # an interactive terminal. Jenkins cannot provide the sudo prompt.
+                # The user must run it manually — see the URL summary below.
+                # If already running, the existing tunnel is kept.
+                if pgrep -f "minikube tunnel" > /dev/null 2>&1; then
+                    echo "  minikube tunnel: already running (OK)"
+                else
+                    echo "  minikube tunnel: NOT running — user must start it manually"
+                fi
 
                 # ── Add chatbot.local to /etc/hosts if missing ────────────────
                 MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "127.0.0.1")
@@ -291,9 +295,13 @@ echo "$SEP"
                 echo "##################################################################"
                 echo "#                                                                #"
                 echo "#   DEPLOYMENT SUCCESSFUL   Build #${BUILD_NUMBER}              #"
-                echo "#   All services accessible via Nginx Ingress + minikube tunnel  #"
+                echo "#   Nginx Ingress routing via chatbot.local                      #"
                 echo "#                                                                #"
                 echo "##################################################################"
+                echo "#"
+                echo "#  STEP 1 ── Run this once in a NEW terminal (needs sudo):      #"
+                echo "#  $ sudo minikube tunnel                                        #"
+                echo "#  Keep that terminal open. Then open the URLs below.            #"
                 echo "#"
                 echo "#  APPLICATION"
                 echo "#  ──────────────────────────────────────────────────────────────"
@@ -313,8 +321,6 @@ echo "$SEP"
                 echo "#  ──────────────────────────────────────────────────────────────"
                 echo "#  Vault UI         →  http://localhost:8200  (token: root)"
                 echo "#"
-                echo "#  NOTE: minikube tunnel is running in background."
-                echo "#  To stop:  pkill -f 'minikube tunnel'"
                 echo "##################################################################"
                 echo ""
             '''
