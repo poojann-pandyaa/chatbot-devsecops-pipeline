@@ -23,6 +23,13 @@ spec:
             name: chatbot-service
             port:
               number: 80
+      - path: /redis(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: redis-service
+            port:
+              number: 9121
       - path: /()(.*)
         pathType: ImplementationSpecific
         backend:
