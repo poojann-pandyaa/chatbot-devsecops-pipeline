@@ -177,6 +177,10 @@ echo "$SEP"
                 sh '''
                     # Ensure Minikube is running before deploy
                     minikube status | grep -q "Running" || minikube start --driver=docker
+
+                    # Ensure Nginx Ingress controller addon is active
+                    minikube addons enable ingress      2>/dev/null || true
+                    minikube addons enable ingress-dns  2>/dev/null || true
                 '''
                 sh '''
                     ansible-playbook ansible/site.yml \
@@ -184,6 +188,13 @@ echo "$SEP"
                         -e "backend_image=${BACKEND_IMAGE}:${IMAGE_TAG}" \
                         -e "frontend_image=${FRONTEND_IMAGE}:${IMAGE_TAG}" \
                         -i ansible/inventory/hosts.ini
+                '''
+                sh '''
+                    # Apply Ingress resources (not managed by Ansible role)
+                    kubectl apply -f k8s/ingress.yaml
+                    kubectl apply -f k8s/monitoring-ingress.yaml
+                    echo "Ingress resources applied."
+                    kubectl get ingress -A
                 '''
             }
         }
@@ -214,90 +225,98 @@ echo "$SEP"
             sh '''#!/bin/bash
                 set +e
 
-                # Start legacy ELK stack (Prometheus/Grafana moved to K8s)
-                echo "Starting observability stack..."
+                # ── ELK Stack (runs via Docker Compose on host) ───────────────
+                echo "Starting ELK observability stack..."
                 cd ${WORKSPACE}
                 docker-compose up -d elasticsearch kibana logstash 2>/dev/null || true
-                sleep 5
 
-                # Stop Docker Compose app containers to avoid port conflicts with K8s
-                # The K8s versions are the production services; Docker copies must not compete
+                # Stop any Docker Compose app containers that conflict with K8s
                 docker stop chatbot-frontend chatbot-backend vault 2>/dev/null || true
 
-                # Kill stale port-forwards
-                pkill -f "kubectl port-forward.*chatbot-service"    2>/dev/null || true
-                pkill -f "kubectl port-forward.*frontend-service"   2>/dev/null || true
-                pkill -f "kubectl port-forward.*vault"              2>/dev/null || true
-                pkill -f "kubectl port-forward.*prometheus-service" 2>/dev/null || true
-                pkill -f "kubectl port-forward.*grafana-service"    2>/dev/null || true
+                # ── Kill ALL stale port-forwards (no longer needed) ───────────
+                pkill -f "kubectl port-forward" 2>/dev/null || true
                 sleep 2
 
-                # Start port-forwards (K8s services → localhost)
-                # Prevent Jenkins ProcessTreeKiller from terminating our background port-forwards
+                # ── Ensure minikube tunnel is running (Ingress → 127.0.0.1) ──
+                # tunnel maps the Ingress LoadBalancer IP to 127.0.0.1 on Mac
+                pkill -f "minikube tunnel" 2>/dev/null || true
+                sleep 1
                 export JENKINS_NODE_COOKIE=dontKillMe
                 export BUILD_ID=dontKillMe
-                nohup kubectl port-forward service/frontend-service   3000:80   -n ${NAMESPACE} > /tmp/pf-frontend.log 2>&1 &
-                nohup kubectl port-forward service/chatbot-service    8000:80   -n ${NAMESPACE} > /tmp/pf-backend.log  2>&1 &
-                nohup kubectl port-forward service/vault              8200:8200 -n vault        > /tmp/pf-vault.log    2>&1 &
-                nohup kubectl port-forward service/prometheus-service 9090:9090 -n monitoring   > /tmp/pf-prometheus.log 2>&1 &
-                nohup kubectl port-forward service/grafana-service    3001:3000 -n monitoring   > /tmp/pf-grafana.log    2>&1 &
+                nohup minikube tunnel --cleanup=false > /tmp/minikube-tunnel.log 2>&1 &
+                sleep 5
+
+                # ── Add chatbot.local to /etc/hosts if missing ────────────────
+                MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "127.0.0.1")
+                if ! grep -q "chatbot.local" /etc/hosts 2>/dev/null; then
+                    echo "127.0.0.1  chatbot.local" | sudo tee -a /etc/hosts > /dev/null
+                    echo "Added chatbot.local → 127.0.0.1 to /etc/hosts"
+                else
+                    echo "chatbot.local already in /etc/hosts"
+                fi
+
+                # ── Wait for Ingress controller to assign an IP ───────────────
+                echo "Waiting for Ingress controller to become ready..."
+                for i in $(seq 1 20); do
+                    INGRESS_IP=$(kubectl get ingress chatbot-ingress -n ${NAMESPACE} \
+                        -o jsonpath=\'{.status.loadBalancer.ingress[0].ip}\' 2>/dev/null)
+                    if [ -n "$INGRESS_IP" ]; then
+                        echo "  Ingress IP assigned: $INGRESS_IP"
+                        break
+                    fi
+                    echo "  Waiting... ($i/20)"
+                    sleep 3
+                done
+
+                # ── Vault: still needs one port-forward (no public route) ─────
+                nohup kubectl port-forward service/vault 8200:8200 -n vault \
+                    > /tmp/pf-vault.log 2>&1 &
+
+                # ── ELK Kibana (Docker Compose — already on port 5601) ────────
                 sleep 3
 
-                # Verify that port-forwards are active and listening
-                echo "Verifying localhost service port-forwards..."
-                echo "--------------------------------------------------------"
-                for port in 3000 8000 8200 9090 3001 5601; do
-                    if lsof -i :$port >/dev/null 2>&1 || nc -z localhost $port >/dev/null 2>&1; then
-                        echo "  Port $port: ACTIVE & LISTENING"
-                    else
-                        echo "  Port $port: NOT LISTENING (Possible conflict or startup latency)"
-                    fi
-                done
-                echo "--------------------------------------------------------"
+                # ── Pod summary ───────────────────────────────────────────────
+                echo ""
+                echo "  [Application Namespace: ${NAMESPACE}]"
+                kubectl get pods -n ${NAMESPACE} -o wide
+                echo ""
+                echo "  [Monitoring Namespace: monitoring]"
+                kubectl get pods -n monitoring -o wide
+                echo ""
+                echo "  [Ingress Resources]"
+                kubectl get ingress -A
 
-                # Dynamically retrieve Minikube IP and K8s NodePorts
-                MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "127.0.0.1")
-                FRONTEND_NODEPORT=$(kubectl get svc frontend-service -n ${NAMESPACE} -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "31774")
-                GRAFANA_NODEPORT=$(kubectl get svc grafana-service -n monitoring -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "30001")
-                PROMETHEUS_NODEPORT=$(kubectl get svc prometheus-service -n monitoring -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "30090")
-
+                # ════════════════════════════════════════════════════════════
                 echo ""
-                echo "========================================================"
-                echo "  DEPLOYMENT SUCCESSFUL  --  Build #${BUILD_NUMBER}"
-                echo "========================================================"
-                echo "  ACCESS METHOD 1: Localhost Port-Forwards (Mac/Local)"
-                echo "  --------------------------------------------------------"
-                echo "  Chatbot UI   :  http://localhost:3000"
-                echo "  Backend API  :  http://localhost:8000/docs"
-                echo "  Kibana       :  http://localhost:5601"
-                echo "  Grafana      :  http://localhost:3001"
-                echo "  Prometheus   :  http://localhost:9090"
-                echo "  --------------------------------------------------------"
-                echo "  ACCESS METHOD 2: Direct NodePort URLs (Minikube IP)"
-                echo "  --------------------------------------------------------"
-                echo "  Chatbot UI   :  http://${MINIKUBE_IP}:${FRONTEND_NODEPORT}"
-                echo "  Grafana      :  http://${MINIKUBE_IP}:${GRAFANA_NODEPORT}"
-                echo "  Prometheus   :  http://${MINIKUBE_IP}:${PROMETHEUS_NODEPORT}"
-                echo "  --------------------------------------------------------"
-                echo "  PODS HOSTING & NETWORK INFORMATION"
-                echo "  --------------------------------------------------------"
-                echo "  [Application Space (Namespace: ${NAMESPACE})]"
-                kubectl get pods -n ${NAMESPACE} -o custom-columns=POD:.metadata.name,IP:.status.podIP,STATUS:.status.phase,NODE:.spec.nodeName
+                echo "##################################################################"
+                echo "#                                                                #"
+                echo "#   DEPLOYMENT SUCCESSFUL   Build #${BUILD_NUMBER}              #"
+                echo "#   All services accessible via Nginx Ingress + minikube tunnel  #"
+                echo "#                                                                #"
+                echo "##################################################################"
+                echo "#"
+                echo "#  APPLICATION"
+                echo "#  ──────────────────────────────────────────────────────────────"
+                echo "#  Chatbot UI       →  http://chatbot.local/"
+                echo "#  Backend API Docs →  http://chatbot.local/api/docs"
+                echo "#"
+                echo "#  OBSERVABILITY (K8s Ingress)"
+                echo "#  ──────────────────────────────────────────────────────────────"
+                echo "#  Grafana          →  http://chatbot.local/grafana/"
+                echo "#  Prometheus       →  http://chatbot.local/prometheus/"
+                echo "#"
+                echo "#  LOGGING (Docker Compose — ELK)"
+                echo "#  ──────────────────────────────────────────────────────────────"
+                echo "#  Kibana           →  http://localhost:5601"
+                echo "#"
+                echo "#  SECRETS"
+                echo "#  ──────────────────────────────────────────────────────────────"
+                echo "#  Vault UI         →  http://localhost:8200  (token: root)"
+                echo "#"
+                echo "#  NOTE: minikube tunnel is running in background."
+                echo "#  To stop:  pkill -f 'minikube tunnel'"
+                echo "##################################################################"
                 echo ""
-                echo "  [Observability Space (Namespace: monitoring)]"
-                kubectl get pods -n monitoring -o custom-columns=POD:.metadata.name,IP:.status.podIP,STATUS:.status.phase,NODE:.spec.nodeName
-                echo ""
-                echo "  --------------------------------------------------------"
-                echo "  VAULT ACCESS (Namespace: vault)"
-                echo "  --------------------------------------------------------"
-                echo "  1. Start port-forward:"
-                echo "       kubectl port-forward service/vault 8200:8200 -n vault"
-                echo "  2. Open in browser:  http://localhost:8200"
-                echo "  3. Login with token: root"
-                echo "  --------------------------------------------------------"
-                echo "  NOTE: Vault uses kubectl port-forward by design."
-                echo "  To stop localhost port-forwards: pkill -f 'kubectl port-forward'"
-                echo "========================================================"
             '''
         }
         failure {
