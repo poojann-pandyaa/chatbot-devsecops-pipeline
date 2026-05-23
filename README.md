@@ -2,7 +2,7 @@
 
 This project deploys a Next.js chatbot through a DevSecOps pipeline with Docker,
 Jenkins, Ansible, Kubernetes, Trivy, SonarQube, Vault-backed secrets, and
-production-oriented Kubernetes controls.
+production-oriented Kubernetes controls
 
 ## Kubernetes Production Upgrades
 
