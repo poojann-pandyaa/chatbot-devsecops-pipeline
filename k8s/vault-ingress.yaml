@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vault-ingress
+  namespace: vault
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: chatbot.local
+    http:
+      paths:
+      - path: /vault(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: vault
+            port:
+              number: 8200

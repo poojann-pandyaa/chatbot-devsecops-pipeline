@@ -12,7 +12,12 @@ from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTEN
 from pydantic import BaseModel
 from typing import Optional
 
-app = FastAPI()
+app = FastAPI(
+    title="AI Chatbot API",
+    description="Backend API for the AI Chatbot application",
+    version="1.0.0",
+    root_path="/backend",
+)
 
 # ---------------------------------------------------------------------------
 # Prometheus metrics

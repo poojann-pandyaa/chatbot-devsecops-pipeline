@@ -190,9 +190,9 @@ echo "$SEP"
                         -i ansible/inventory/hosts.ini
                 '''
                 sh '''
-                    # Apply Ingress resources and updated Prometheus (not managed by Ansible role)
                     kubectl apply -f k8s/ingress.yaml
                     kubectl apply -f k8s/monitoring-ingress.yaml
+                    kubectl apply -f k8s/vault-ingress.yaml
                     kubectl apply -f k8s/prometheus/statefulset.yaml
                     kubectl apply -f k8s/grafana/deployment.yaml
                     echo "Ingress + Prometheus + Grafana resources applied."
@@ -272,11 +272,7 @@ echo "$SEP"
                     sleep 3
                 done
 
-                # ── Vault: still needs one port-forward (no public route) ─────
-                nohup kubectl port-forward service/vault 8200:8200 -n vault \
-                    > /tmp/pf-vault.log 2>&1 &
-
-                # ── ELK Kibana (Docker Compose — already on port 5601) ────────
+                # ── Vault port-forward no longer needed (Ingress handles it) ─
                 sleep 3
 
                 # ── Pod summary ───────────────────────────────────────────────
@@ -320,7 +316,7 @@ echo "$SEP"
                 echo "#"
                 echo "#  SECRETS"
                 echo "#  ──────────────────────────────────────────────────────────────"
-                echo "#  Vault UI         →  http://localhost:8200  (token: root)"
+                echo "#  Vault UI         →  http://chatbot.local/vault/ui/  (token: root)"
                 echo "#"
                 echo "##################################################################"
                 echo ""
