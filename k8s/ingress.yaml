@@ -8,27 +8,23 @@ metadata:
     nginx.ingress.kubernetes.io/session-cookie-name: "CHATBOT_SESSION"
     nginx.ingress.kubernetes.io/session-cookie-expires: "3600"
     nginx.ingress.kubernetes.io/session-cookie-max-age: "3600"
-    # Rewrite /api/* → /* on the backend service
     nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
 spec:
   ingressClassName: nginx
   rules:
   - host: chatbot.local
     http:
       paths:
-      # Backend API — all /api/* paths proxy to FastAPI via the Next.js BFF
-      # The Next.js frontend itself calls its own /api/* routes internally,
-      # so this rule only needs to catch direct external API calls.
-      - path: /api/(.*)
+      - path: /backend(/|$)(.*)
         pathType: ImplementationSpecific
         backend:
           service:
             name: chatbot-service
             port:
               number: 80
-      # Frontend — catch-all (must be last)
-      - path: /
-        pathType: Prefix
+      - path: /()(.*)
+        pathType: ImplementationSpecific
         backend:
           service:
             name: frontend-service
