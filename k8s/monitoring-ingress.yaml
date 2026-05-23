@@ -4,7 +4,9 @@ metadata:
   name: monitoring-ingress
   namespace: monitoring
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    # No rewrite-target: Grafana (GF_SERVER_SERVE_FROM_SUB_PATH=true) and
+    # Prometheus (--web.route-prefix=/prometheus/) both handle their own
+    # sub-paths natively. Nginx must forward the full path unchanged.
     nginx.ingress.kubernetes.io/use-regex: "true"
 spec:
   ingressClassName: nginx
